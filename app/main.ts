@@ -57,8 +57,8 @@ async function main(): Promise<void> {
   const uniswapFactory: Contract = UniswapFactory.attach(await uniswapRouter.factory());
 
   // Get the WBNB address
-  const WBNB: string = await uniswapRouter.WETH();
-
+  const WBNB: string = (await uniswapRouter.WETH()).toLowerCase();
+  console.log('wbnb:', WBNB)
   // const baseTokens: string[] = [WBNB];
   let targetTokens: string[] = [];
 
@@ -66,6 +66,7 @@ async function main(): Promise<void> {
     const previousTokens: string[] = targetTokens;
     targetTokens = fs.readFileSync(path)
       .toString()
+      .toLowerCase()
       .split("\n")
       .map((item: string) => item.trim())
       .filter(ethers.utils.isAddress);
@@ -83,6 +84,8 @@ async function main(): Promise<void> {
     .on("unlink", () => {targetTokens = []});
 
   uniswapFactory.on("PairCreated", async (token0Address: string, token1Address: string, pairAddress: string): Promise<void> => {
+    token0Address = token0Address.toLowerCase();
+    token1Address = token1Address.toLowerCase();
     console.log(
       "A pair has been created:",
       "\nToken0:", token0Address,
@@ -90,6 +93,7 @@ async function main(): Promise<void> {
       "\nPair:", pairAddress,
       "\nTime:", new Date().toISOString().replace("T", " ").replace("Z", ""),
     );
+    console.log(WBNB == token0Address, WBNB == token1Address, targetTokens.includes(token0Address), targetTokens.includes(token1Address));
     if (!(
       (targetTokens.includes(token0Address) && token1Address == WBNB) ||
       (targetTokens.includes(token1Address) && token0Address == WBNB)
@@ -111,7 +115,7 @@ async function main(): Promise<void> {
     console.log(path);
     console.log(wallet.address, SWAP_AMOUNT,await wallet.getTransactionCount()); 
     // TODO: add the swapExactTokensForTokens branch for WBNB
-    console.log(await uniswapRouter.swapExactETHForTokens(0, path, wallet.address, Date.now() + 1000 * 60 * 10, {value: SWAP_AMOUNT, gasLimit: 800000, gasPrice: gasPrice}));
+    console.log("Swap result:", await uniswapRouter.swapExactETHForTokens(0, path, wallet.address, Date.now() + 1000 * 60 * 10, {value: SWAP_AMOUNT, gasLimit: 800000, gasPrice: gasPrice}));
 
     console.log(
       "This target token info",
