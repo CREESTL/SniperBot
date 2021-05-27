@@ -111,7 +111,7 @@ async function main(): Promise<void> {
     console.log(path);
     console.log(wallet.address, SWAP_AMOUNT,await wallet.getTransactionCount()); 
     // TODO: add the swapExactTokensForTokens branch for WBNB
-    console.log(await uniswapRouter.swapExactETHForTokens(0, path, wallet.address, Date.now() + 1000 * 60 * 10, {value: SWAP_AMOUNT, gasLimit: 800000, gasPrice: ethers.utils.parseUnits("45", "gwei"), nonce: 1 + (await wallet.getTransactionCount())}));
+    console.log(await uniswapRouter.swapExactETHForTokens(0, path, wallet.address, Date.now() + 1000 * 60 * 10, {value: SWAP_AMOUNT, gasLimit: 800000, gasPrice: gasPrice}));
 
     console.log(
       "This target token info",
