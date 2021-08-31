@@ -1,5 +1,6 @@
 import fs from "fs";
 import glob from "glob";
+import * as yaml from 'js-yaml'
 import { Signer, ContractFactory } from "ethers";
 import type { ContractData } from "./types";
 
@@ -23,4 +24,12 @@ export function getContractFactory(name: string, signer: Signer): ContractFactor
 // A function to stop an async thread for a few miliseconds
 export function sleep(ms: number): Promise<Function> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export function loadConfig(path: string): Config {
+  return yaml.load(fs.readFileSync(path, 'utf-8')) as Config
+}
+
+export function loadTargetTokens(path: string): Config {
+  return yaml.load(fs.readFileSync(path, 'utf-8')) as Config
 }
