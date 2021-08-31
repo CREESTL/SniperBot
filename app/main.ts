@@ -1,6 +1,25 @@
 import { config as dotEnvConfig } from "dotenv";
 dotEnvConfig();
 
+
+/*
+A brief explanation of how the script works:
+
+1) When main() runs two things happen:
+1.1) A listener of pair creation events activates and starts monitoring 
+1.2) A listener for local "tokens.txt" file changes activates and starts monitoring
+2) A list of tokens a user wants to buy is created from that "tokens.txt" file 
+3) If a pair of tokens on Uniswap is created we check if it contains some token from the list
+3.1) If it does and there is no liquidity in the pair yet -  we wait for the pair to be minted (liquidity added) and then buy the token
+3.2) If is does and there is already some liquidity in the pair - we buy the token 
+3.3) If it does not - then the script just ignores it
+4) If at any given time "tokens.txt" file changes then the list of tokens from point 2 changes for the new one
+5) If any of tokens from the new list has it's pair then points 3.1 - 3.3 are repeated for that token
+*/
+
+
+
+
 import fs from "fs";
 import chokidar from "chokidar";
 import { Signer, ContractFactory, Contract, BigNumber, providers, Wallet } from "ethers";
@@ -165,6 +184,8 @@ async function main(): Promise<void> {
   });
   // End of async function that runs each time the pair is created
 
+
+
   // Main farming function
   // Function updates the list of desired tokens and logs it into the file
   // Runs on EACH update of tokens.txt file
@@ -211,7 +232,7 @@ async function main(): Promise<void> {
         if ((await pair.totalSupply()).gt(0)) continue;
 
         // If this token has a pair but has no liquidity, then wait till the liquidity is added and buy the token
-        waitMintAndBuyToken(pair, targetToken)
+        waitMintAndBuyToken(pair, singleToken)
       }
     }
   }
