@@ -11,10 +11,14 @@ A brief explanation of how the script works:
 2) A list of tokens a user wants to buy is created from that "tokens.txt" file 
 3) If a pair of tokens on Uniswap is created we check if it contains some token from the list
 3.1) If it does and there is no liquidity in the pair yet -  we wait for the pair to be minted (liquidity added) and then buy the token
-3.2) If is does and there is already some liquidity in the pair - we buy the token 
+3.2) If is does and there is already some liquidity in the pair - we buy the token because it has just been created and it's profitable to buy it right now
 3.3) If it does not - then the script just ignores it
 4) If at any given time "tokens.txt" file changes then the list of tokens from point 2 changes for the new one
-5) If any of tokens from the new list has it's pair then points 3.1 - 3.3 are repeated for that token
+5) Check each token from the new list to see if it has a pair
+5.1) If if does and there is any liquidity in the pair - do now but the tokens as it means that someone else has already bought it and it's not profitable
+5.2) If it does and there is no liquidity in the pair - wait for the pair to be minted (liquidity added) and buy the token
+
+and so on...
 */
 
 
