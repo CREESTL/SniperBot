@@ -45,6 +45,8 @@ const GAS_LIMIT: number = 300000;
  // Uniswap Router perfoms safety checks for swapping, adding and removing liquidity
  // It has different addresses in different chains
 const uniswapRouterAddresses: { [key: string]: string } = {
+  // In our case hardhat network is a fork of ETH mainnet - so these routers have the same address
+  hardhat: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
   mainnet: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
   kovan: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
   rinkeby: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
@@ -54,10 +56,11 @@ const uniswapRouterAddresses: { [key: string]: string } = {
 
 
 async function main(): Promise<void> {
-  console.log("*Beep* *Beep*  Starting the bot...\n");
+  console.log("*Beep* Starting the bot! *Beep* \n");
 
   // Get the name of the current network
   const network: string = hardhat.network.name;
+  console.log("Current network name: ", network);
 
   // Get the first waller to work with (user's wallet)
   const wallets: SignerWithAddress[] = await ethers.getSigners();
@@ -72,7 +75,6 @@ async function main(): Promise<void> {
     "Main wallet address:", wallet.address,
     "\nBalance of this wallet:", formatEther(await wallet.getBalance()),
     "\nRouter address:", routerAddress,
-    "\n",
   );
 
 
@@ -203,7 +205,7 @@ async function main(): Promise<void> {
       });
     });
 
- 
+
     // Get tokens addresses from the local tokens.txt file
     const tokens: string[] = fs.readFileSync(path)
       .toString()
@@ -246,7 +248,7 @@ async function main(): Promise<void> {
     .on("unlink", () => {singleTokens = []});
 
 
-  console.log("Waiting for a new pair to be created");
+  console.log("Waiting for a new pair to be created...");
 }
 
 

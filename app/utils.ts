@@ -26,10 +26,18 @@ export function sleep(ms: number): Promise<Function> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// TODO: make that function create a pair of token/WBNB, token/WETH so that listener in main() could see these events
+export function createPair(singleToken: string, WToken: string){
+  
+}
+
+// TODO: make that function load network configuration from local .yaml file instead of .env file
 export function loadConfig(path: string): Config {
   return yaml.load(fs.readFileSync(path, 'utf-8')) as Config
 }
 
-export function loadTargetTokens(path: string): Config {
+// TODO: make that function load single tokens from local .yaml file instead of .env file
+export function loadSingleTokens(path: string): Config {
   return yaml.load(fs.readFileSync(path, 'utf-8')) as Config
 }
+
