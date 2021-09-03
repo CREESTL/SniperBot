@@ -23,7 +23,7 @@ const KOVAN_PRIVATE_KEY = process.env.KOVAN_PRIVATE_KEY;
 const RINKEBY_PRIVATE_KEY = process.env.RINKEBY_PRIVATE_KEY;
 
 // Use AlchemyAPI to make fork if its URL specifyed else use the Infura API
-const FORK_URL = ALCHEMYAPI_URL || `https://kovan.infura.io/v3/${INFURA_PROJECT_ID}`;
+const FORK_URL = ALCHEMYAPI_URL || `https://mainnet.infura.io/v3/${INFURA_PROJECT_ID}`;
 
 const BLOCK_NUMBER: number | undefined = undefined;
 
@@ -43,13 +43,14 @@ const config: HardhatUserConfig = {
     hardhat: {
       forking: {
         url: FORK_URL,
-        // specifing blockNumber available only for AlchemyAPI
+        // Specifing blockNumber available only for AlchemyAPI
         blockNumber: ALCHEMYAPI_URL ? BLOCK_NUMBER : undefined,
       },
-      accounts: KOVAN_PRIVATE_KEY ? [{
-        privateKey: KOVAN_PRIVATE_KEY,
-        balance: ethers.utils.parseEther('10000').toString(),
-      }] : [],
+      // Create 20 Signers with 1000 ETH each
+      accounts: {
+        count: 20,
+        accountsBalance: ethers.utils.parseEther('10000').toString(),
+      },
     },
     localhost: {},
     mainnet: {
