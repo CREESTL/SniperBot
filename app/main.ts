@@ -33,7 +33,7 @@ const { formatEther, parseEther } = ethers.utils;
 import { getContractFactory } from "./utils";
 import type { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import type { TransactionResponse, TransactionReceipt, Log } from "@ethersproject/abstract-provider";
-import type { TransactionReceiptWithEvents, ContractData } from "./types";
+import type { TransactionReceiptWithEvents, ContractData, Config } from "./types";
 
 // Max. amount of ETH the user is ready to spend
 const SWAP_AMOUNT: BigNumber = parseEther(process.env.SWAP_AMOUNT || "");
@@ -51,8 +51,6 @@ const uniswapRouterAddresses: { [key: string]: string } = {
   bsc_mainnet: "0x10ED43C718714eb63d5aA57B78B54704E256024E",
   bsc_testnet: "0xD99D1c33F9fC3444f8101754aBC46c52416550D1",
 }
-
-
 
 
 async function main(): Promise<void> {

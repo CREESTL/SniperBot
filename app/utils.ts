@@ -2,7 +2,7 @@ import fs from "fs";
 import glob from "glob";
 import * as yaml from 'js-yaml'
 import { Signer, ContractFactory } from "ethers";
-import type { ContractData } from "./types";
+import type { ContractData, Config } from "./types";
 
 // Get a ContractFactory by a contract name from ./artifacts dir
 export function getContractFactory(name: string, signer: Signer): ContractFactory {

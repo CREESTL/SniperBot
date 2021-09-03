@@ -24,3 +24,8 @@ export interface ContractData {
   linkReferences: object,
   deployedLinkReferences: object,
 }
+
+
+// TODO make an interface for configuration that is loaded from .yaml file
+// now this is done via .env
+export interface Config {}
