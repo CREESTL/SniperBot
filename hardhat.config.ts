@@ -40,19 +40,25 @@ const config: HardhatUserConfig = {
     ],
   },
   networks: {
+
     hardhat: {
       forking: {
         url: FORK_URL,
         // Specifing blockNumber available only for AlchemyAPI
         blockNumber: ALCHEMYAPI_URL ? BLOCK_NUMBER : undefined,
       },
-      // Create 20 Signers with 1000 ETH each
+      // Create 20 Signers with 1000 wei(not ETH!!!) each
       accounts: {
         count: 20,
         accountsBalance: ethers.utils.parseEther('10000').toString(),
       },
+      // Each new block in mined once in 10 seconds
+      mining: {
+        auto: false,
+        interval: 10000
+      }
     },
-    localhost: {},
+
     mainnet: {
       url: `https://mainnet.infura.io/v3/${INFURA_PROJECT_ID}`,
       accounts: MAINNET_PRIVATE_KEY ? [MAINNET_PRIVATE_KEY] : [],
