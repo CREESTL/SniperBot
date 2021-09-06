@@ -30,7 +30,6 @@ import { Signer, ContractFactory, Contract, BigNumber, providers, Wallet } from 
 import hardhat from "hardhat";
 const { ethers } = hardhat;
 const { formatEther, parseEther } = ethers.utils;
-import { getContractFactory } from "./utils";
 import type { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import type { TransactionResponse, TransactionReceipt, Log } from "@ethersproject/abstract-provider";
 import type { TransactionReceiptWithEvents, ContractData, Config } from "./types";
@@ -77,15 +76,16 @@ async function main(): Promise<void> {
     "\nRouter address:", routerAddress,
   );
 
-
+  // TODO replace getContractFactory with getContractAt and add addresses
+  
   // Get contract factories to attach their interfaces to addresses of contracts
-  const ERC20: ContractFactory = getContractFactory("IERC20", wallet);
+  const ERC20: ContractFactory = await ethers.getContractFactory("IERC20");
   // Uniswap Router perfoms safety checks for swapping, adding and removing liquidity
-  const UniswapRouter: ContractFactory = getContractFactory("IUniswapV2Router02", wallet);
+  const UniswapRouter: ContractFactory = await ethers.getContractFactory("IUniswapV2Router02");
   // Uniswap Factory deploys Uniswap Pair contracts for any ERC20 / ERC20 pair
-  const UniswapFactory: ContractFactory = getContractFactory("IUniswapV2Factory", wallet);
+  const UniswapFactory: ContractFactory = await ethers.getContractFactory("IUniswapV2Factory");
   // Uniswap Pair implements core swapping functionality
-  const UniswapPair: ContractFactory = getContractFactory("IUniswapV2Pair", wallet);
+  const UniswapPair: ContractFactory = await ethers.getContractFactory("IUniswapV2Pair");
 
   // Attach interfaces to addresses
   const uniswapRouter: Contract = UniswapRouter.attach(routerAddress);
@@ -98,7 +98,7 @@ async function main(): Promise<void> {
   // List of tokens without a pair 
   let singleTokens: string[] = [];
 
-  // Function to buy a signle token from the minted pair
+  // Function to buy a single token from the minted pair
   const buyToken = async (singleToken: Contract): Promise<void> => {
     console.log(
       "Buying a token:",
