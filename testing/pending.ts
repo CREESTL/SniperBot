@@ -13,9 +13,11 @@ const SWAP_UNITS = 1;
 // Gas limit for transactions
 const GAS_LIMIT = 1000000
 
-
+// Constant address of Uniswap Router
 const ROUTER_ADDRESS = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 
+const amountTokenDesired: BigNumber = ethers.utils.parseEther("1");
+const amountETHDesired: BigNumber = ethers.utils.parseEther("1"); 
 
 async function main(): Promise<void> {
 
@@ -80,16 +82,6 @@ async function main(): Promise<void> {
 
 			console.log("\n\n\n");
 
-			// Function to locally deploy factory of shitcoins
-			async function deployShitCoinFactory(signer: Signer): Promise <string> {
-	  		const ShitCoinFactory: ContractFactory = await ethers.getContractFactory("ShitCoinFactory");
-	  		let shitCoinFactory: Contract = await ShitCoinFactory.deploy();
-	  		await shitCoinFactory.deployed();
-	  		console.log("ShitCoinFactory deployed successfully. Address:", shitCoinFactory.address);
-
-	  		return shitCoinFactory.address
-			}
-
 
 			// Function to locally deploy shitcoins
 			async function deployShitCoin(signer: Signer): Promise <string> {
@@ -107,7 +99,6 @@ async function main(): Promise<void> {
 
 
 			// In order to create a *some token* / WETH pair on local fork of Uniswap we have to deploy that token (shitcoin) first
-			const shitCoinFactoryAddress: string = await deployShitCoinFactory(wallet);
 			const shitCoinAddress: string = await deployShitCoin(wallet);
 
 
@@ -115,24 +106,29 @@ async function main(): Promise<void> {
 		  const uniswapRouter: Contract = await ethers.getContractAt("IUniswapV2Router02", ROUTER_ADDRESS);
 		  const uniswapFactory: Contract = await ethers.getContractAt("IUniswapV2Factory", await uniswapRouter.factory());
 		  const shitCoin: Contract = await ethers.getContractAt("ShitCoin", shitCoinAddress);
-		  const shitCoinFactory: Contract = await ethers.getContractAt("ShitCoinFactory", shitCoinFactoryAddress);
 		  const WETH: Contract = await ethers.getContractAt("IERC20", await uniswapRouter.WETH());
 
 
 		  console.log("WETH address is ", WETH.address);
 		  console.log("ShitCoin address is ", shitCoin.address);
 		  console.log("Wallet address is ", wallet.address);
+		  console.log("Wallet balance is ", ethers.utils.formatEther(await wallet.getBalance()));
+		  
+		  // First we have to approve token transaction
+		 	console.log("Approving adding liquidity...");
+		  const approveShitCoinTx: TransactionResponse = await shitCoin.approve(uniswapRouter.address, amountTokenDesired);
+		  await approveShitCoinTx.wait();
+		  console.log("Approved!");
 
 		  console.log("Trying to add liquidity...");
-
-
-		  // TODO FAILS!!!
+		  // TODO FAILS!!! Add mint() function to ShitCoin!!!!
 		  // Add some liquidity to the token in order for the pair not to have a zero address
 		  const txResponse: TransactionResponse = await uniswapRouter.addLiquidityETH(
+		  		// All following amounts are measured in wei (not ETH!!!)
 		  		// The token that receives that liquidity
 		  		shitCoin.address,
 		  		// The amount of tokens to add to the pool if there is less tokens than WETH in the pool
-		  		100, 
+		  		amountTokenDesired,
 		  		// If WETH/token price goes up to 1/1 ratio - the transaction reverts
 		  		ethers.utils.parseEther("1"),
 		  		ethers.utils.parseEther("1"),
@@ -141,8 +137,9 @@ async function main(): Promise<void> {
 		  		// Deadline after which the transaction reverts
 		  		Date.now() + 1000 * 60 * 10,
 		  		// the amount of WETH to add to the pool if there is less WETH thatn tokens in the pool
-		  		{value: 100}, // Single ETH
+		  		{value: amountETHDesired}, // Single ETH
 		  	)
+
 
 		  const txReceipt: TransactionReceiptWithEvents = await txResponse.wait();
 
@@ -152,6 +149,8 @@ async function main(): Promise<void> {
 		  const uniswapPair: Contract = await ethers.getContractAt("IUniswapV2Pair", pairAddress);
 
 		  console.log("Address of the pair:", pairAddress);
+
+
 
 
 		  console.log("\n\n\n");
