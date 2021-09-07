@@ -1,7 +1,7 @@
 // This script is used to stream pending transactions to see what's inside them
 
 
-import { Signer, ContractFactory, Contract, BigNumber, providers, Wallet } from "ethers";
+import { Signer, ContractFactory, Contract, BigNumber, providers, Wallet} from "ethers";
 import hardhat from "hardhat";
 const { ethers } = hardhat;
 import type { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
@@ -32,8 +32,24 @@ async function main(): Promise<void> {
 	  // Each pending transaction is just logged
 		provider.on("pending", (tx) => {
 			console.log("\n\n\nPending transaction detected!");
-			provider.getTransaction(tx.hash).then(function (transaction) {
+			provider.getTransaction(tx.hash).then(async function (transaction) {
 			  console.log("Here is it's info: ", transaction, "\n\n\n");
+
+			  const {data} = transaction;
+
+			  // Function to parse "data" field from pending transaction
+			  async function parse_data(data: string){
+			  	const abiRouter = require('../artifacts/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json').abi;
+			  	const uniswapRouter = new ethers.utils.Interface(abiRouter);
+			  	let parsed_data = uniswapRouter.decodeFunctionData("addLiquidityETH", data);
+
+			  	return parsed_data;
+			  }
+
+			  if (data != "0x"){
+			  	console.log("Parsed data is ", await parse_data(data));
+			  }
+ 
 			});
 		});
 
@@ -152,10 +168,13 @@ async function main(): Promise<void> {
 
 		  console.log("Liquidity added!");
 
+		  // Only after adding liquidity pair has non-zerro(0x0000000.... address)
 		  const pairAddress: string = await uniswapFactory.getPair(WETH.address, tToken.address);
 		  const uniswapPair: Contract = await ethers.getContractAt("IUniswapV2Pair", pairAddress);
 
 		  console.log("Address of the pair:", pairAddress);
+
+
 
 
 		  console.log("\n\n\n");
