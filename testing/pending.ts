@@ -37,10 +37,27 @@ async function main(): Promise<void> {
 
 			  const {data} = transaction;
 
+			 	// Below are some functions to parse "data" field from pending transactions
 
-			  // TODO add parsing for: pair mint (ERC20), factory.createPair
+			  const parseCreatePairDataField = async (data: string) => {
+			  	const abiFactory = require('../artifacts/contracts/interfaces/IUniswapV2Factory.sol/IUniswapV2Factory.json').abi;
+			  	const uniswapFactory = new ethers.utils.Interface(abiFactory);
 
-			  // Function to parse "data" field from pending transaction
+			  	let parsed_data = uniswapFactory.decodeFunctionData("createPair", data);
+
+			  	return parsed_data;
+			  }
+
+			  // TODO Fix variables names
+			  const parseMintDataField = async (data: string) => {
+			  	const abiFactory = require('../artifacts/contracts/interfaces/IUniswapV2Factory.sol/IUniswapV2Factory.json').abi;
+			  	const uniswapFactory = new ethers.utils.Interface(abiFactory);
+
+			  	let parsed_data = uniswapFactory.decodeFunctionData("createPair", data);
+
+			  	return parsed_data;
+			  }
+
 			  const parseAddLiquidityETHDataField = async (data: string) => {
 			  	const abiRouter = require('../artifacts/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json').abi;
 			  	const uniswapRouter = new ethers.utils.Interface(abiRouter);
@@ -50,7 +67,19 @@ async function main(): Promise<void> {
 			  }
 
 			  if (data != "0x"){
-			  	console.log("Parsed data is ", await parseAddLiquidityETHDataField(data));
+
+			  	try {
+			  		console.log("Parsed data is ", await parseAddLiquidityETHDataField(data));
+			  	}
+			  	catch(e){
+			  		console.log("That was not addLiquidityETH() transaction!");
+			  	}
+			  	try{
+			  		console.log("Parsed data is ", await parseCreatePairDataField(data));
+			  	}
+			  	catch(e){
+			  		console.log("That was not createPair() transaction!");
+			  	}
 			  }
  
 			});
@@ -144,9 +173,16 @@ async function main(): Promise<void> {
 	  await approveTTokenTx.wait();
 	  console.log("Approved!");
 
+
+	  // console.log("createPair()!!!!!");
+	  // // TEST
+	  // const txResponse1: TransactionResponse = await uniswapFactory.createPair(tToken.address, WETH.address);
+
+
 	  console.log("\nTrying to add liquidity...");
 
 	  // Add some liquidity to the token in order for the pair not to have a zero address
+	  // This method calls mint() and createPair() inside of it
 	  const txResponse: TransactionResponse = await uniswapRouter.addLiquidityETH(
 	  		// All following amounts are measured in wei (not ETH!!!)
 	  		// The token that receives that liquidity
@@ -169,14 +205,11 @@ async function main(): Promise<void> {
 
 	  console.log("Liquidity added!");
 
-	  // Only after adding liquidity pair has non-zerro(0x0000000.... address)
+	  // Only after adding liquidity pair has non-zerro(0x0000000....) address
 	  const pairAddress: string = await uniswapFactory.getPair(WETH.address, tToken.address);
 	  const uniswapPair: Contract = await ethers.getContractAt("IUniswapV2Pair", pairAddress);
 
 	  console.log("Address of the pair:", pairAddress);
-
-
-
 
 	  console.log("\n\n\n");
 
