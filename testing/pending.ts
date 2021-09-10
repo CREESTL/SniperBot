@@ -7,6 +7,8 @@ const { ethers } = hardhat;
 import type { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import type { TransactionResponse, TransactionReceipt, Log } from "@ethersproject/abstract-provider";
 import type { TransactionReceiptWithEvents, ContractData} from "./types";
+import { pack, keccak256 } from '@ethersproject/solidity'
+import { getInitCodeHashForPair } from "./init_code"
 
 // The amount of ETH to be thrown from one wallet to another to create pending transactions
 const SWAP_UNITS = 1;
@@ -18,6 +20,82 @@ const ROUTER_ADDRESS = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 
 const amountTokenDesired: BigNumber = ethers.utils.parseEther("1");
 const amountETHDesired: BigNumber = ethers.utils.parseEther("1"); 
+
+
+// Helper-functions...
+
+// Function to place addreses of two tokens in correct order
+const sortTokens = async(tokenA: string, tokenB: string) => {
+	if (tokenA == tokenB){
+		console.log("ERROR: Tokens have the same address!");
+		return
+	}
+	let token0: string;
+	let token1: string;
+	[token0, token1] = tokenA < tokenB ? [tokenA, tokenB] : [tokenB, tokenA];
+	if (token0 == "0x0000000000000000000000000000000000000000"){
+		console.log("ERROR: One of the tokens has zero address!");
+		return
+	}
+
+	return [token0, token1];
+
+} 
+
+
+
+// Function to predict pair address using addresses of two separate tokens
+const predictPairAddress = async (factoryAddress: string, token0Address: string, token1Address: string) => {
+	let initCodeHash = await getInitCodeHashForPair();
+	let pairAddress = ethers.utils.getCreate2Address(
+		factoryAddress,
+		//ethers.utils.solidityKeccak256(["bytes", "bytes"], [token0Address, token1Address]),
+		keccak256(['bytes'], [pack(['address', 'address'], [token0Address, token1Address])]),
+		initCodeHash,
+	);
+
+		return pairAddress
+	}
+
+
+
+// Below are some functions to parse "data" field from pending transactions
+const parseCreatePairDataField = async (data: string) => {
+	const abiFactory = require('../artifacts/contracts/interfaces/IUniswapV2Factory.sol/IUniswapV2Factory.json').abi;
+	const uniswapFactory = new ethers.utils.Interface(abiFactory);
+
+	let parsed_data = uniswapFactory.decodeFunctionData("createPair", data);
+
+	return parsed_data;
+}
+
+const parseMintDataField = async (data: string) => {
+	const abiPair = require('../artifacts/contracts/interfaces/IUniswapV2Pair.sol/IUniswapV2Pair.json').abi;
+	const uniswapPair = new ethers.utils.Interface(abiPair);
+
+	let parsed_data = uniswapPair.decodeFunctionData("mint", data);
+
+	return parsed_data;
+}
+
+
+const parseAddLiquidityETHDataField = async (data: string) => {
+	const abiRouter = require('../artifacts/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json').abi;
+	const uniswapRouter = new ethers.utils.Interface(abiRouter);
+	let parsed_data = uniswapRouter.decodeFunctionData("addLiquidityETH", data);
+
+	return parsed_data;
+}
+
+
+const parseAddLiquidityDataField = async (data: string) => {
+	const abiRouter = require('../artifacts/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json').abi;
+	const uniswapRouter = new ethers.utils.Interface(abiRouter);
+	let parsed_data = uniswapRouter.decodeFunctionData("addLiquidity", data);
+
+	return parsed_data;
+}
+
 
 async function main(): Promise<void> {
 
@@ -35,39 +113,20 @@ async function main(): Promise<void> {
 			provider.getTransaction(tx.hash).then(async function (transaction) {
 			  console.log("Here is it's info: ", transaction, "\n\n\n");
 
+			  const from: string | undefined = transaction.from;
+			  const to: string | undefined = transaction.to;
+
+
 			  const {data} = transaction;
-
-			 	// Below are some functions to parse "data" field from pending transactions
-
-			  const parseCreatePairDataField = async (data: string) => {
-			  	const abiFactory = require('../artifacts/contracts/interfaces/IUniswapV2Factory.sol/IUniswapV2Factory.json').abi;
-			  	const uniswapFactory = new ethers.utils.Interface(abiFactory);
-
-			  	let parsed_data = uniswapFactory.decodeFunctionData("createPair", data);
-
-			  	return parsed_data;
-			  }
-
-			  // TODO Fix variables names
-			  const parseMintDataField = async (data: string) => {
-			  	const abiFactory = require('../artifacts/contracts/interfaces/IUniswapV2Factory.sol/IUniswapV2Factory.json').abi;
-			  	const uniswapFactory = new ethers.utils.Interface(abiFactory);
-
-			  	let parsed_data = uniswapFactory.decodeFunctionData("createPair", data);
-
-			  	return parsed_data;
-			  }
-
-			  const parseAddLiquidityETHDataField = async (data: string) => {
-			  	const abiRouter = require('../artifacts/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json').abi;
-			  	const uniswapRouter = new ethers.utils.Interface(abiRouter);
-			  	let parsed_data = uniswapRouter.decodeFunctionData("addLiquidityETH", data);
-
-			  	return parsed_data;
-			  }
 
 			  if (data != "0x"){
 
+			  	try {
+			  		console.log("Parsed data is ", await parseAddLiquidityDataField(data));
+			  	}
+			  	catch(e){
+			  		console.log("That was not addLiquidity() transaction!");
+			  	}
 			  	try {
 			  		console.log("Parsed data is ", await parseAddLiquidityETHDataField(data));
 			  	}
@@ -79,6 +138,12 @@ async function main(): Promise<void> {
 			  	}
 			  	catch(e){
 			  		console.log("That was not createPair() transaction!");
+			  	}
+			  	try{
+			  		console.log("Parsed data is ", await parseMintDataField(data));
+			  	}
+			  	catch(e){
+			  		console.log("That was not mint() transaction!");
 			  	}
 			  }
  
@@ -154,9 +219,13 @@ async function main(): Promise<void> {
 	  const tToken: Contract = await ethers.getContractAt("TToken", tTokenAddress);
 	  const WETH: Contract = await ethers.getContractAt("IERC20", await uniswapRouter.WETH());
 
+	  // Predict the address of the pair of WETH/token before creating it
+	  //const predictedPairAddress = await predictPairAddress(uniswapFactory.address, WETH.address, tToken.address);
+		const predictedPairAddress = await predictPairAddress(uniswapFactory.address, WETH.address, tToken.address);
 
 	  console.log("WETH address is ", WETH.address);
 	  console.log("TToken address is ", tToken.address);
+	  console.log("Predicted WETH/TToken pair address is", predictedPairAddress);
 	  console.log("Wallet address is ", wallet.address);
 	  console.log("Wallet ETH balance is ", ethers.utils.formatEther(await wallet.getBalance()));
 
@@ -172,12 +241,6 @@ async function main(): Promise<void> {
 	  const approveTTokenTx: TransactionResponse = await tToken.approve(uniswapRouter.address, amountTokenDesired);
 	  await approveTTokenTx.wait();
 	  console.log("Approved!");
-
-
-	  // console.log("createPair()!!!!!");
-	  // // TEST
-	  // const txResponse1: TransactionResponse = await uniswapFactory.createPair(tToken.address, WETH.address);
-
 
 	  console.log("\nTrying to add liquidity...");
 
