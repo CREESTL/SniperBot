@@ -7,8 +7,8 @@ const { ethers } = hardhat;
 import type { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import type { TransactionResponse, TransactionReceipt, Log } from "@ethersproject/abstract-provider";
 import type { TransactionReceiptWithEvents, ContractData} from "./types";
-import { pack, keccak256 } from '@ethersproject/solidity'
-import { getInitCodeHashForPair } from "./init_code"
+import { pack, keccak256 } from '@ethersproject/solidity';
+import { getInitCodeHashForPair } from "./init_code";
 
 // The amount of ETH to be thrown from one wallet to another to create pending transactions
 const SWAP_UNITS = 1;
