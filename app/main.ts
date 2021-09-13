@@ -3,6 +3,9 @@ dotEnvConfig();
 
 
 /*
+
+TODO CHANGE THAT!
+
 A brief explanation of how the script works:
 
 1) When main() runs two things happen:
@@ -81,15 +84,11 @@ async function main(): Promise<void> {
   // Get contract factories to attach their interfaces to addresses of contracts
   const ERC20: ContractFactory = await ethers.getContractFactory("IERC20");
   // Uniswap Router perfoms safety checks for swapping, adding and removing liquidity
-  const UniswapRouter: ContractFactory = await ethers.getContractFactory("IUniswapV2Router02");
+  const uniswapRouter: Contract = await ethers.getContractAt("IUniswapV2Router02", routerAddress);
   // Uniswap Factory deploys Uniswap Pair contracts for any ERC20 / ERC20 pair
-  const UniswapFactory: ContractFactory = await ethers.getContractFactory("IUniswapV2Factory");
+  const uniswapFactory: Contract = await ethers.getContractAt("IUniswapV2Factory", uniswapRouter.factory());
   // Uniswap Pair implements core swapping functionality
-  const UniswapPair: ContractFactory = await ethers.getContractFactory("IUniswapV2Pair");
 
-  // Attach interfaces to addresses
-  const uniswapRouter: Contract = UniswapRouter.attach(routerAddress);
-  const uniswapFactory: Contract = UniswapFactory.attach(await uniswapRouter.factory());
 
   // Get the WBNB address
   const WBNB: string = (await uniswapRouter.WETH()).toLowerCase();
@@ -173,7 +172,7 @@ async function main(): Promise<void> {
     // Update the address of the single token from the pair
     const singleToken: Contract = ERC20.attach(token0Address == WBNB ? token1Address : token0Address);
     // Update the address of the whole pair of tokens
-    const pair: Contract = UniswapPair.attach(pairAddress);
+    const pair: Contract = await ethers.getContractAt("IUniswapV2Pair", pairAddress);
 
     console.log("This is an expected pair! Now it's minting. Please, wait...");
 
@@ -196,6 +195,7 @@ async function main(): Promise<void> {
   const buyAndUpdateSingleTokens = async (path: string): Promise<void> => {
     // Remove all listeners added for tokens
     // (if the list of tokens is empty - nothing happens here)
+    const UniswapPair: ContractFactory = await ethers.getContractFactory("IUniswapV2Pair");
     singleTokens.forEach((token: string): void => {
       ethers.provider.removeAllListeners({
         address: token,
