@@ -269,7 +269,7 @@ async function main(): Promise<void> {
 
 	*/
 
-  //await sendSingleToken();
+  await sendSingleToken();
 	await createPairOfTokens();
 	
 
