@@ -29,13 +29,14 @@ and so on...
 
 import fs from "fs";
 import chokidar from "chokidar";
-import { Signer, ContractFactory, Contract, BigNumber, providers, Wallet } from "ethers";
+import { Signer, ContractFactory, Contract, BigNumber, providers, Wallet} from "ethers";
 import hardhat from "hardhat";
 let { ethers } = hardhat;
 let { formatEther, parseEther } = ethers.utils;
 import type { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import type { TransactionResponse, TransactionReceipt, Log } from "@ethersproject/abstract-provider";
+import type { TransactionResponse, TransactionReceipt, Log, Provider } from "@ethersproject/abstract-provider";
 import type { TransactionReceiptWithEvents, ContractData, Config } from "./types";
+import { getContractFactory } from "./utils";
 
 // Max. amount of ETH the user is ready to spend
 const SWAP_AMOUNT: BigNumber = parseEther(process.env.SWAP_AMOUNT || "");
@@ -43,6 +44,12 @@ const SWAP_AMOUNT: BigNumber = parseEther(process.env.SWAP_AMOUNT || "");
 const FILE_WITH_TOKENS: string = "tokens.txt";
 // Max. amount of gas that suits the user
 const GAS_LIMIT: number = 300000;
+
+
+// TODO delete if not used
+const amountTokenDesired: BigNumber = ethers.utils.parseEther("1");
+const amountETHDesired: BigNumber = ethers.utils.parseEther("1"); 
+
 
 
 // Global variables used in functions
@@ -64,43 +71,36 @@ let ERC20: ContractFactory;
 let wallet: SignerWithAddress;
 // Current gas price
 let gasPrice: BigNumber;
+// Provider for Ethereum blockchain
+let provider: Provider;
 
 
 
-// Addresses of UniswapRouter in different chains
-const uniswapRouterAddresses: { [key: string]: string } = {
-    // In our case hardhat network is a fork of ETH mainnet - so these routers have the same address
-    hardhat: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-    mainnet: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-    kovan: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-    rinkeby: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-    bsc_mainnet: "0x10ED43C718714eb63d5aA57B78B54704E256024E",
-    bsc_testnet: "0xD99D1c33F9fC3444f8101754aBC46c52416550D1",
-  }
+// Constant address of Uniswap Router in Ethereum mainnet
+const ROUTER_ADDRESS = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 
 
 // Function to initialize global variables with som values
 let initGlobals = async (): Promise<void> => {
 
+  provider = ethers.provider;
+
   // At first the list must be empty
   singleTokens = [];
 
-  // Get the name of the current network and the address of the router in that network
-  let network: string = hardhat.network.name;
-  let routerAddress: string = uniswapRouterAddresses[network];
-
   // Uniswap Router perfoms safety checks for swapping, adding and removing liquidity
-  uniswapRouter = await ethers.getContractAt("IUniswapV2Router02", routerAddress);
+  uniswapRouter = await ethers.getContractAt("IUniswapV2Router02", ROUTER_ADDRESS);
   // Uniswap Factory deploys Uniswap Pair contracts for any ERC20 / ERC20 pair
-  uniswapFactory = await ethers.getContractAt("IUniswapV2Factory", uniswapRouter.factory());
+  uniswapFactory = await ethers.getContractAt("IUniswapV2Factory", await uniswapRouter.factory());
   // Uniswap Pair implements core swapping functionality
   // Uniswap Pair DOES NOT need initialization (it's abstract)
 
-  WETH = await ethers.getContractAt("IERC20", await uniswapRouter.WETH());
 
   // Get the first wallet to work with (user's wallet)
   let wallets: SignerWithAddress[] = await ethers.getSigners();
   wallet = wallets[0];
+
+  WETH = await ethers.getContractAt("IERC20", await uniswapRouter.WETH());
 
   // Get the current gas price
   gasPrice = await ethers.provider.getGasPrice();
@@ -108,18 +108,16 @@ let initGlobals = async (): Promise<void> => {
 
   console.log(
     "Main wallet address:", wallet.address,
-    "\nBalance of this wallet:", formatEther(await wallet.getBalance()),
-    "\nGas price: ", gasPrice,
+    "\nBalance of this wallet:", formatEther(await wallet.getBalance())
   );
-
-} 
+}   
 
 // Function to buy a single token from the minted pair
 let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice: BigNumber): Promise<void> => {
   console.log(
     "Buying a token:",
     "\nTarget token:", singleToken.address,
-    "\nBase token:", WETH,
+    "\nBase token:", WETH.address,
     "\nTime:", new Date().toISOString().replace("T", " ").replace("Z", ""),
     "\n",
   );
@@ -133,12 +131,6 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
   );
 
   console.log("Swap transaction:", swapTx);
-
-  console.log(
-    "Swap result:\n",
-    await swapTx.wait(),
-    "\nTime:", new Date().toISOString().replace("T", " ").replace("Z", ""),
-  );
 
   console.log(
     "Token info after the swap:",
@@ -197,8 +189,7 @@ const buyAndUpdateSingleTokens = async (pair: Contract, wallet: SignerWithAddres
     // Get a WETH/token pair
     let pairAddress: string = await uniswapFactory.getPair(WETH.address, token);
     
-    // If this token doesn't have a pair then put it in the list of single tokens
-    // and wait for the pair creation in the future
+    // If address of the pair is a zero address - that means there is no liquidity on the pair yet
     if (pairAddress == ethers.constants.AddressZero) {
       singleTokens.push(token);
     } else {
@@ -216,19 +207,67 @@ const buyAndUpdateSingleTokens = async (pair: Contract, wallet: SignerWithAddres
 }
 
 
+// Function to parse "data" field of addLiquidityETH transaction
+let parseAddLiquidityETHDataField = async (data: string) => {
+  let abiRouter = require('../artifacts/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json').abi;
+  let uniswapRouter = new ethers.utils.Interface(abiRouter);
+  let parsed_data = uniswapRouter.decodeFunctionData("addLiquidityETH", data);
 
+  return parsed_data;
+}
 
+// Function to parse "data" field of addLiquidity transaction
+let parseAddLiquidityDataField = async (data: string) => {
+  let abiRouter = require('../artifacts/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json').abi;
+  let uniswapRouter = new ethers.utils.Interface(abiRouter);
+  let parsed_data = uniswapRouter.decodeFunctionData("addLiquidity", data);
 
+  return parsed_data;
+}
+  
+
+// In parsed data of both addLiquidity transactions "token" field as the address of token that receives the liquidity
+// and "to" field is the address of wallet that gets back it's Liquidity Points (LPs)
+let checkParsedData = (parsedData: any) => {
+  let token = parsedData.token.toLowerCase();
+  if (singleTokens.includes(token)){
+    return true;
+  }
+  return false;
+}
 
 
 async function main(): Promise<void> {
   console.log("*Beep* Starting the bot! *Beep* \n");
 
   await initGlobals();
+   
+   // Simple pair creation
+  let CP = async () => {
+    const UniswapRouter: ContractFactory = getContractFactory("IUniswapV2Router02", wallet);
+    const UniswapFactory: ContractFactory = getContractFactory("IUniswapV2Factory", wallet);
+
+    // Attach interfaces to addresses
+    const uniswapRouter: Contract = UniswapRouter.attach(ROUTER_ADDRESS);
+    const uniswapFactory: Contract = UniswapFactory.attach(await uniswapRouter.factory());
+
+    let t1 = '0x0355B7B8cb128fA5692729Ab3AAa199C1753f726';
+    let t2 = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
+
+    console.log("Creating a pair of tokens...");
+    let TX = await uniswapFactory.createPair(t1, t2);
+    let tx = await TX.wait();
+    console.log("Done!");
+    
+
+
+  }
 
   // Listen to the event of pair creation by someone else on the Uniswap
   // If the pair was created - run the async function EACH time
   // Runs in the back
+
+  // TODO it doesnt trigger on addLiquidity() or createPair()!
   uniswapFactory.on("PairCreated", async (token0Address: string, token1Address: string, pairAddress: string): Promise<void> => {
     token0Address = token0Address.toLowerCase();
     token1Address = token1Address.toLowerCase();
@@ -242,11 +281,12 @@ async function main(): Promise<void> {
       "\nTime:", new Date().toISOString().replace("T", " ").replace("Z", ""),
     );
 
+    console.log("target token is ", singleTokens);
  
     // Check if this pair is token/WETH or WETH/token
     if (!(
-      (singleTokens.includes(token0Address) && token1Address == WETH.address) ||
-      (singleTokens.includes(token1Address) && token0Address == WETH.address)
+      (singleTokens.includes(token0Address) && token1Address == WETH.address.toLowerCase()) ||
+      (singleTokens.includes(token1Address) && token0Address == WETH.address.toLowerCase())
     )) {
       console.log("This pair doesn't have a target token!");
       return;
@@ -267,11 +307,49 @@ async function main(): Promise<void> {
       // If there is - buy desired token from the pair
       await buyToken(wallet, singleToken, gasPrice);
     }
-
-
     
   });
 
+  // Listen for pending transactions and parse them
+  provider.on("pending", (tx) => {
+    console.log("\n\n\nPending transaction detected!");
+    provider.getTransaction(tx.hash).then(async function (transaction) {
+
+      let {data} = transaction;
+
+      // TODO find a more fancy way to handle this
+
+      if (data != "0x"){
+
+        try {
+          let parsed_data = await parseAddLiquidityDataField(data);
+          console.log("Parsed data is ", parsed_data);
+          if (checkParsedData(parsed_data) == true) {
+            console.log("This AddLiquidity transaction is the one we need!");
+            await buyToken(wallet, parsed_data.token.toLowerCase(), gasPrice.sub(1));
+            console.log("Got it!");
+          }
+        }catch(e){}
+
+        try {
+          let parsed_data = await parseAddLiquidityETHDataField(data);
+          console.log("Parsed data is ", parsed_data);
+          if (checkParsedData(parsed_data) == true) {
+            console.log("This AddLiquidityETH transaction is the one we need!");
+            await buyToken(wallet, parsed_data.token.toLowerCase(), gasPrice.sub(1));
+            console.log("Got it!");
+          }
+        }catch(e){}
+
+      };
+    });
+  });
+
+
+  // Each mined block is logged (for debug)
+  provider.on("block", () => {
+    console.log("\n(new block mined)\n");
+  })
 
 
   // Listen for updates of the file with tokens addresses
@@ -285,8 +363,5 @@ async function main(): Promise<void> {
 }
 
 
-main()
-  .catch(error => {
-    console.error(error);
-    process.exit(1);
-  });
+main();
+
