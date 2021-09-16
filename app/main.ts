@@ -37,6 +37,8 @@ import type { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import type { TransactionResponse, TransactionReceipt, Log, Provider } from "@ethersproject/abstract-provider";
 import type { TransactionReceiptWithEvents, ContractData, Config } from "./types";
 import { getContractFactory } from "./utils";
+import { tokenState, Token } from "./token";
+
 
 // Max. amount of ETH the user is ready to spend
 const SWAP_AMOUNT: BigNumber = parseEther(process.env.SWAP_AMOUNT || "");
@@ -44,11 +46,8 @@ const SWAP_AMOUNT: BigNumber = parseEther(process.env.SWAP_AMOUNT || "");
 const FILE_WITH_TOKENS: string = "tokens.txt";
 // Max. amount of gas that suits the user
 const GAS_LIMIT: number = 300000;
-
-
-// TODO delete if not used
-const amountTokenDesired: BigNumber = ethers.utils.parseEther("1");
-const amountETHDesired: BigNumber = ethers.utils.parseEther("1"); 
+// Constant address of Uniswap Router in Ethereum mainnet
+const ROUTER_ADDRESS = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 
 
 
@@ -74,10 +73,10 @@ let gasPrice: BigNumber;
 // Provider for Ethereum blockchain
 let provider: Provider;
 
+// List of tokens to track their state
+let tokens: Token[];
 
 
-// Constant address of Uniswap Router in Ethereum mainnet
-const ROUTER_ADDRESS = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 
 
 // Function to initialize global variables with som values
@@ -110,26 +109,46 @@ let initGlobals = async (): Promise<void> => {
     "Main wallet address:", wallet.address,
     "\nBalance of this wallet:", formatEther(await wallet.getBalance())
   );
+
+  tokens = [];
 }   
 
 
+
 // Function checks if token's price has grown 10 times bigger
-// let check10Times = async (oldPrice: number, tokenAddress: string, WETHAddress=WETH.address) => {
-//   let newPrice = uniswapRouter.getAmountsOut(ethers.utils.parseEther('1'), [WETHAddress, tokenAddress])[0];
-//   if (newPrice >= (oldPrice * 10)){
-//     return true;
-//   }
-//   return false;
-// }
-
-let check10Times = async (amountETHIn: BigNumber, ETHReserves: BigNumber, tokenReserves: BigNumber, oldPrice: BigNumber) => {
-  let newPrice: BigNumber = uniswapRouter.getAmountOut(amountETHIn, ETHReserves, tokenReserves);
-
-  if (newPrice.div(oldPrice) >= BigNumber.from('10')){
+let check10Times = async (oldPrice: number, tokenAddress: string, WETHAddress=WETH.address) => {
+  let newPrice = uniswapRouter.getAmountsOut(ethers.utils.parseEther('1'), [WETHAddress, tokenAddress])[0];
+  if (newPrice >= (oldPrice * 10)){
     return true;
   }
   return false;
 }
+
+
+
+// Function to change token's state in global array
+let changeState = (token: Token, newState: tokenState) => {
+  let exactToken = tokens.find(t => t.address == token.address);
+  if (exactToken !== undefined){
+    tokens[tokens.indexOf(exactToken)].state = newState;     
+  }
+}
+
+
+
+// Function to check if the token is being processed
+// Returns true if the token is NOT free
+let checkProcessed = (token: Token) => {
+  let exactToken = tokens.find(t => t.address == token.address);
+  if (exactToken !== undefined){
+    if (exactToken.state != tokenState.Free){
+      return true;
+    }
+  }
+  return false;
+}
+
+
 
 // Function to buy a single token from the minted pair
 let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice: BigNumber): Promise<void> => {
@@ -141,6 +160,15 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
     "\n",
   );
 
+  // Create a new instance of Token class with token's address and state
+  let token = new Token(singleToken.address, tokenState.Buying);
+
+  // The processing of that same token could have been started in waitMintAndBuyToken()
+  // If it hasn't - add the token to the global list
+  if (!(checkProcessed(token))){
+     tokens.push(token); 
+  }
+
   let path: string[] = [WETH.address, singleToken.address];
 
   // Swap ETH for tokens
@@ -148,6 +176,9 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
     0, path, wallet.address, Date.now() + 1000 * 60 * 10,
     {value: SWAP_AMOUNT, gasLimit: GAS_LIMIT, gasPrice: gasPrice},
   );
+
+  // Changes token's state to Bought only in that function
+  changeState(token, tokenState.Bought);
 
   console.log("Got it!");
   console.log("Swap transaction:", swapTx);
@@ -162,10 +193,20 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
   console.log("ETH balance after the swap:", formatEther(await wallet.getBalance()), "\n");
 }
 
+
+
 // Buying token is available only after the whole pair it is in is minted
 // This function awaits that event
 let waitMintAndBuyToken = (pair: Contract, wallet: SignerWithAddress, singleToken: Contract, gasPrice: BigNumber): void => {
     console.log("Pair wasn't minted yet. Waiting...");
+
+    // Create a new instance of Token class with token's address and state
+    // We should "lock" that token's state at "Buying" while we wait for the pair to be minted
+    let token = new Token(singleToken.address, tokenState.Buying);
+    if (!(checkProcessed(token))){
+     tokens.push(token); 
+    }
+
     pair.once("Mint", async () => {
       console.log("Pair has been minted!");
       // After the pair is minted we can but the token
@@ -189,7 +230,6 @@ const buyAndUpdateSingleTokens = async (pair: Contract, wallet: SignerWithAddres
       ],
     });
   });
-
 
   // Get tokens addresses from the local tokens.txt file
   let tokens: string[] = fs.readFileSync(FILE_WITH_TOKENS)
@@ -218,13 +258,16 @@ const buyAndUpdateSingleTokens = async (pair: Contract, wallet: SignerWithAddres
       singleToken = await ethers.getContractAt("IERC20", token);
 
       // If this token already has liquidity, don't buy it
-      if ((await pair.totalSupply()).gt(0)) continue;
+      if ((await pair.totalSupply()).gt(0)){
+        continue;
+      }
 
       // If this token has a pair but has no liquidity, then wait till the liquidity is added and buy the token
       waitMintAndBuyToken(pair, wallet, singleToken, gasPrice);
     }
   }
 }
+
 
 
 // Function to parse "data" field of addLiquidityETH transaction
@@ -236,6 +279,8 @@ let parseAddLiquidityETHDataField = async (data: string) => {
   return parsed_data;
 }
 
+
+
 // Function to parse "data" field of addLiquidity transaction
 let parseAddLiquidityDataField = async (data: string) => {
   let abiRouter = require('../artifacts/contracts/interfaces/IUniswapV2Router02.sol/IUniswapV2Router02.json').abi;
@@ -246,6 +291,7 @@ let parseAddLiquidityDataField = async (data: string) => {
 }
   
 
+
 // In parsed data of both addLiquidity transactions "token" field as the address of token that receives the liquidity
 // and "to" field is the address of wallet that gets back it's Liquidity Points (LPs)
 let checkParsedData = (parsedData: any) => {
@@ -255,6 +301,9 @@ let checkParsedData = (parsedData: any) => {
   }
   return false;
 }
+
+
+
 
 
 async function main(): Promise<void> {
@@ -292,7 +341,14 @@ async function main(): Promise<void> {
     // Update the address of the whole pair of tokens
     pair = await ethers.getContractAt("IUniswapV2Pair", pairAddress);
 
-    console.log("This is an expected pair! Now it's minting. Please, wait...");
+    let token = new Token(singleToken.address);
+
+    // "PairCreated" event could have been called inside of addLiquidity() or addLiquidityETH() transactions
+    // If so - that means that the token is already being processed - ignore it
+    if (checkProcessed(token)){
+      // If it is - continue to another one
+      return;
+    }
 
     // Check if there is any liquidity in the pair
     if ((await pair.totalSupply()).eq(0)) {
@@ -319,6 +375,13 @@ async function main(): Promise<void> {
         try {
           let parsed_data = await parseAddLiquidityDataField(data);
           console.log("Parsed data is ", parsed_data);
+
+          // If for some reason the token is already being processed - ignore the token
+          let token = new Token(parsed_data.token);
+          if (checkProcessed(token)){
+            return;
+          }
+
           if (checkParsedData(parsed_data) == true) {
             console.log("This AddLiquidity transaction is the one we need!");
             await buyToken(wallet, parsed_data.token.toLowerCase(), gasPrice.sub(1));
@@ -328,6 +391,13 @@ async function main(): Promise<void> {
         try {
           let parsed_data = await parseAddLiquidityETHDataField(data);
           console.log("Parsed data is ", parsed_data);
+
+           // If for some reason the token is already being processed - ignore the token
+          let token = new Token(parsed_data.token);
+          if (checkProcessed(token)){
+            return;
+          }
+
           if (checkParsedData(parsed_data) == true) {
             console.log("This AddLiquidityETH transaction is the one we need!");
             await buyToken(wallet, parsed_data.token.toLowerCase(), gasPrice.sub(1));
