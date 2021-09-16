@@ -112,6 +112,25 @@ let initGlobals = async (): Promise<void> => {
   );
 }   
 
+
+// Function checks if token's price has grown 10 times bigger
+// let check10Times = async (oldPrice: number, tokenAddress: string, WETHAddress=WETH.address) => {
+//   let newPrice = uniswapRouter.getAmountsOut(ethers.utils.parseEther('1'), [WETHAddress, tokenAddress])[0];
+//   if (newPrice >= (oldPrice * 10)){
+//     return true;
+//   }
+//   return false;
+// }
+
+let check10Times = async (amountETHIn: BigNumber, ETHReserves: BigNumber, tokenReserves: BigNumber, oldPrice: BigNumber) => {
+  let newPrice: BigNumber = uniswapRouter.getAmountOut(amountETHIn, ETHReserves, tokenReserves);
+
+  if (newPrice.div(oldPrice) >= BigNumber.from('10')){
+    return true;
+  }
+  return false;
+}
+
 // Function to buy a single token from the minted pair
 let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice: BigNumber): Promise<void> => {
   console.log(
@@ -130,6 +149,7 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
     {value: SWAP_AMOUNT, gasLimit: GAS_LIMIT, gasPrice: gasPrice},
   );
 
+  console.log("Got it!");
   console.log("Swap transaction:", swapTx);
 
   console.log(
@@ -241,33 +261,10 @@ async function main(): Promise<void> {
   console.log("*Beep* Starting the bot! *Beep* \n");
 
   await initGlobals();
-   
-   // Simple pair creation
-  let CP = async () => {
-    const UniswapRouter: ContractFactory = getContractFactory("IUniswapV2Router02", wallet);
-    const UniswapFactory: ContractFactory = getContractFactory("IUniswapV2Factory", wallet);
-
-    // Attach interfaces to addresses
-    const uniswapRouter: Contract = UniswapRouter.attach(ROUTER_ADDRESS);
-    const uniswapFactory: Contract = UniswapFactory.attach(await uniswapRouter.factory());
-
-    let t1 = '0x0355B7B8cb128fA5692729Ab3AAa199C1753f726';
-    let t2 = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
-
-    console.log("Creating a pair of tokens...");
-    let TX = await uniswapFactory.createPair(t1, t2);
-    let tx = await TX.wait();
-    console.log("Done!");
-    
-
-
-  }
 
   // Listen to the event of pair creation by someone else on the Uniswap
   // If the pair was created - run the async function EACH time
   // Runs in the back
-
-  // TODO it doesnt trigger on addLiquidity() or createPair()!
   uniswapFactory.on("PairCreated", async (token0Address: string, token1Address: string, pairAddress: string): Promise<void> => {
     token0Address = token0Address.toLowerCase();
     token1Address = token1Address.toLowerCase();
@@ -280,8 +277,6 @@ async function main(): Promise<void> {
       "\nPair:", pairAddress,
       "\nTime:", new Date().toISOString().replace("T", " ").replace("Z", ""),
     );
-
-    console.log("target token is ", singleTokens);
  
     // Check if this pair is token/WETH or WETH/token
     if (!(
@@ -327,7 +322,6 @@ async function main(): Promise<void> {
           if (checkParsedData(parsed_data) == true) {
             console.log("This AddLiquidity transaction is the one we need!");
             await buyToken(wallet, parsed_data.token.toLowerCase(), gasPrice.sub(1));
-            console.log("Got it!");
           }
         }catch(e){}
 
@@ -337,7 +331,6 @@ async function main(): Promise<void> {
           if (checkParsedData(parsed_data) == true) {
             console.log("This AddLiquidityETH transaction is the one we need!");
             await buyToken(wallet, parsed_data.token.toLowerCase(), gasPrice.sub(1));
-            console.log("Got it!");
           }
         }catch(e){}
 
