@@ -1,5 +1,5 @@
 // TODO delete unused atributes
-
+import { BigNumber } from "ethers";
 
 export enum tokenState{
 	Free,
@@ -13,7 +13,8 @@ export enum tokenState{
 
 export class Token {
 	state: tokenState;
-	price: number;	
+	oldPrice: BigNumber;
+	currentPrice: BigNumber;	
 	address: string;
 	constructor(initAddress: string, initState?: tokenState){
 		if (initState !== undefined){
