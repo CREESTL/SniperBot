@@ -26,9 +26,9 @@ and so on...
 
 // TODO check all swapExact transactions amount in - why is it 0?
 // TODO maybe replace all token: Contract with token: Token???
-// TODO use BigNumber in prices - not number!
 // TODO add more console.log for user
-// TODO call checkTonePricesAndSellTokens repeatedly in the end
+// TODO Calculate OldPrice right after a token has been added to tokens and await tx.wait(). That means that there 100% is a pair with such tokens and liquidity in it.
+// TODO call checkTonePricesAndSellTokens on each Swap, Mint event
 
 import fs from "fs";
 import chokidar from "chokidar";
@@ -106,7 +106,7 @@ let initGlobals = async (): Promise<void> => {
 
   // Get the current gas price
   gasPrice = await ethers.provider.getGasPrice();
-  console.log("Current gas price:", ethers.utils.formatUnits(gasPrice, "gwei"));
+  console.log("Current gas price:", ethers.utils.formatEther(gasPrice), "ETH");
 
   console.log(
     "Main wallet address:", wallet.address,
@@ -204,14 +204,6 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
     console.log("a new token added to tokens!!!"); 
   }
 
-  // Get token/WETH price before buying the token
-  // Price is BigNumber
-  let bothPrices = await uniswapRouter.getAmountsOut(ethers.utils.parseEther('1'), [WETH.address, token.address]);
-  let oldPrice = bothPrices[1];
-  console.log("Old price of token is ", ethers.utils.parseEther(oldPrice), 'ETH');
-  // Change token's old price while it's already in the list 
-  changeOldPrice(token, oldPrice);
-
   let path: string[] = [WETH.address, singleToken.address];
 
   // Swap ETH for tokens
@@ -219,9 +211,20 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
     0, path, wallet.address, Date.now() + 1000 * 60 * 10,
     {value: SWAP_AMOUNT, gasLimit: GAS_LIMIT, gasPrice: gasPrice},
   );
+  // Wait for the transaction to finish
+  // It is important because only then there will be liquidity in the pair
+  await swapTx.wait();
 
   // Changes token's state to Bought only in that function
   changeState(token, tokenState.Bought);
+
+  // Get token/WETH price before buying the token
+  // Price is BigNumber
+  let bothPrices = await uniswapRouter.getAmountsOut(ethers.utils.parseEther('1'), [WETH.address, token.address]);
+  let oldPrice = bothPrices[1];
+  console.log("Old price of token is ", ethers.utils.formatEther(oldPrice), 'ETH');
+  // Change token's old price while it's already in the list 
+  changeOldPrice(token, oldPrice);
 
   console.log("Got it!");
   console.log("Swap transaction:", swapTx);
@@ -272,6 +275,9 @@ let sellToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPric
     Date.now() + 1000 * 60 * 10,
     {value: SWAP_AMOUNT, gasLimit: GAS_LIMIT, gasPrice: gasPrice},
   );
+
+  // Wait for the transaction to finish
+  await swapTx.wait();
 
   // Changes token's state to Sold only in that function
   changeState(token, tokenState.Sold);
@@ -465,6 +471,7 @@ async function main(): Promise<void> {
           if (checkParsedData(parsed_data)) {
             console.log("This AddLiquidity transaction is the one we need!");
             let tokenContract = await ethers.getContractAt("IERC20", token.address.toLowerCase());
+            await tx.wait();
             await buyToken(wallet, tokenContract, gasPrice.sub(1));
 
           }
