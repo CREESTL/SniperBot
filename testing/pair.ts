@@ -22,8 +22,8 @@ const ROUTER_ADDRESS = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 
 // The amount of token to add to the pair
 const amountTokenDesired: BigNumber = ethers.utils.parseEther("1");
-// The amount of WETH to add to the pair
-const amountWETHDesired: BigNumber = ethers.utils.parseEther("1"); 
+// The amount of ETH to add to the pair
+const amountETHDesired: BigNumber = ethers.utils.parseEther("1"); 
 
 // Function creates a pair of tokens and adds liquidity to it
 export const createPairOfTokens = async (): Promise<void> => {
@@ -46,20 +46,13 @@ export const createPairOfTokens = async (): Promise<void> => {
   const wallets: SignerWithAddress[] = await ethers.getSigners();
   const wallet: SignerWithAddress = wallets[0];
 
-  // In order to create a *some token* / WETH pair on local fork of Uniswap we have to deploy that token first
+  // In order to create a *some token* / ETH pair on local fork of Uniswap we have to deploy that token first
   const tTokenAddress: string = await deployTToken();
 
   // Get tokens contracts using local ".sol" files and addresses of deployed tokens
   const uniswapRouter: Contract = await ethers.getContractAt("IUniswapV2Router02", ROUTER_ADDRESS);
   const uniswapFactory: Contract = await ethers.getContractAt("IUniswapV2Factory", await uniswapRouter.factory());
   const tToken: Contract = await ethers.getContractAt("TToken", tTokenAddress);
-  const WETH: Contract = await ethers.getContractAt("IWETH", await uniswapRouter.WETH());
-
-  // Deposit 10000 of WETH to the wallet
-  console.log("Depositing 1000 WETH to the wallet...");
-  const depositTxResponse = await WETH.deposit({value: ethers.utils.parseEther("1000")});
-  await depositTxResponse.wait();
-  console.log("Deposit successfull!");
 
   // Before adding tokens to the pool, we need to have some of them on the wallet - mint them
   console.log("Minting 1000 TTokens to the wallet...")
@@ -67,10 +60,9 @@ export const createPairOfTokens = async (): Promise<void> => {
   const mintTTokenReceipt: TransactionReceiptWithEvents = await mintTTokenTx.wait();
   console.log("TToken minted successfully!");
 
-  console.log("WETH address is ", WETH.address);
   console.log("TToken address is ", tToken.address);
   console.log("Wallet address is ", wallet.address);
-  console.log("Wallet ETH balance is ", ethers.utils.formatEther(await WETH.balanceOf(wallet.address)));
+  console.log("Wallet ETH balance is ", ethers.utils.formatEther(await wallet.getBalance());
   console.log("Wallet TToken balance is ", ethers.utils.formatEther(await tToken.balanceOf(wallet.address)));
 
 
@@ -78,69 +70,70 @@ export const createPairOfTokens = async (): Promise<void> => {
   console.log("Approving adding liquidity...");
   const approveTTokenTx: TransactionResponse = await tToken.approve(uniswapRouter.address, amountTokenDesired);
   await approveTTokenTx.wait();
-  const approveWETHTx: TransactionResponse = await WETH.approve(uniswapRouter.address, amountWETHDesired);
-  await approveWETHTx.wait();
   console.log("Approved!");
 
   console.log("Adding liquidity...");
 
-  const addLiquidityTxResponse: TransactionResponse = await uniswapRouter.addLiquidity(
-    WETH.address,
+  const txResponse: TransactionResponse = await uniswapRouter.addLiquidityETH(
+    // All following amounts are measured in wei (not ETH!!!)
+    // The token that receives that liquidity
     tToken.address,
-    amountWETHDesired,
+    // The amount of tokens to add to the pool if there is less tokens than ETH in the pool
     amountTokenDesired,
+    // If ETH/token price goes up to 1/1 ratio - the transaction reverts
     ethers.utils.parseEther("1"),
     ethers.utils.parseEther("1"),
+    // Recipient of the liquidity tokens
     wallet.address,
+    // Deadline after which the transaction reverts
     Date.now() + 1000 * 60 * 10,
+    // the amount of ETH to add to the pool if there is less ETH than tokens in the pool
+    {value: amountETHDesired}, // Single ETH
   );
 
-  const txReceipt: TransactionReceiptWithEvents = await addLiquidityTxResponse.wait();
+  const txReceipt: TransactionReceiptWithEvents = await txResponse.wait();
 
   console.log("Liquidity added!");
 
   // Only after adding liquidity pair has non-zerro(0x0000000....) address
-  const pairAddress: string = await uniswapFactory.getPair(WETH.address, tToken.address);
+  const pairAddress: string = await uniswapFactory.getPair(uniswapRouter.WETH(), tToken.address);
   // Create a contract of the pair of tokens to be able to mint and swap tokens
   const pair: Contract = await ethers.getContractAt("IUniswapV2Pair", pairAddress);
 
   console.log("TToken balance of the wallet after adding:", ethers.utils.formatEther(await tToken.balanceOf(wallet.address)));
-  console.log("WETH balance of the wallet after adding:", ethers.utils.formatEther(await WETH.balanceOf(wallet.address)));
+  console.log("ETH balance of the wallet after adding:", ethers.utils.formatEther(await wallet.getBalance()));
   console.log("TToken balance of the pair after adding:", ethers.utils.formatEther(await tToken.balanceOf(pairAddress)));
-  console.log("WETH balance of the pair after adding:", ethers.utils.formatEther(await WETH.balanceOf(pairAddress)));
+  console.log("ETH balance of the pair after adding:", ethers.utils.formatEther(await pair.getBalance()));
 
 
-  // Now we have to add liquidity to the pair in order for token/WETH price to become 10 times greater
+  // Now we have to add liquidity to the pair in order for token/ETH price to become 10 times greater
   console.log("Keep adding liquidity...");
   while (true){
     console.log("Approving adding liquidity...");
     const approveTTokenTx: TransactionResponse = await tToken.approve(uniswapRouter.address, amountTokenDesired);
     await approveTTokenTx.wait();
-    const approveWETHTx: TransactionResponse = await WETH.approve(uniswapRouter.address, amountWETHDesired);
-    await approveWETHTx.wait();
     console.log("Approved!");
 
     console.log("Adding liquidity...");
 
-    const addLiquidityTxResponse: TransactionResponse = await uniswapRouter.addLiquidity(
-      WETH.address,
+    const txResponse: TransactionResponse = await uniswapRouter.addLiquidityETH(
       tToken.address,
-      amountWETHDesired,
       amountTokenDesired,
       ethers.utils.parseEther("1"),
       ethers.utils.parseEther("1"),
       wallet.address,
       Date.now() + 1000 * 60 * 10,
-    )
+      {value: amountETHDesired},
+    );
 
-    const txReceipt: TransactionReceiptWithEvents = await addLiquidityTxResponse.wait();
+    const txReceipt: TransactionReceiptWithEvents = await txResponse.wait();
 
     console.log("Liquidity added!");
 
     console.log("TToken balance of the wallet after adding:", ethers.utils.formatEther(await tToken.balanceOf(wallet.address)));
-    console.log("WETH balance of the wallet after adding:", ethers.utils.formatEther(await WETH.balanceOf(wallet.address)));
+    console.log("ETH balance of the wallet after adding:", ethers.utils.formatEther(await wallet.getBalance()));
     console.log("TToken balance of the pair after adding:", ethers.utils.formatEther(await tToken.balanceOf(pairAddress)));
-    console.log("WETH balance of the pair after adding:", ethers.utils.formatEther(await WETH.balanceOf(pairAddress)));
+    console.log("ETH balance of the pair after adding:", ethers.utils.formatEther(await pair.getBalance()));
 
   }
 }

@@ -26,9 +26,7 @@ and so on...
 
 // TODO check all swapExact transactions amount in - why is it 0?
 // TODO maybe replace all token: Contract with token: Token???
-// TODO add more console.log for user
-// TODO Calculate OldPrice right after a token has been added to tokens and await tx.wait(). That means that there 100% is a pair with such tokens and liquidity in it.
-// TODO call checkTonePricesAndSellTokens on each Swap, Mint event
+// TODO move all helper-function to a different file
 
 import fs from "fs";
 import chokidar from "chokidar";
@@ -95,27 +93,28 @@ let initGlobals = async (): Promise<void> => {
   // Uniswap Factory deploys Uniswap Pair contracts for any ERC20 / ERC20 pair
   uniswapFactory = await ethers.getContractAt("IUniswapV2Factory", await uniswapRouter.factory());
   // Uniswap Pair implements core swapping functionality
-  // Uniswap Pair DOES NOT need initialization (it's abstract)
-
+  UniswapPair = await getContractFactory("IUniswapV2Pair", wallet);
 
   // Get the first wallet to work with (user's wallet)
   let wallets: SignerWithAddress[] = await ethers.getSigners();
   wallet = wallets[0];
 
-  WETH = await ethers.getContractAt("IERC20", await uniswapRouter.WETH());
+  WETH = await ethers.getContractAt("IWETH", await uniswapRouter.WETH());
 
   // Get the current gas price
   gasPrice = await ethers.provider.getGasPrice();
-  console.log("Current gas price:", ethers.utils.formatEther(gasPrice), "ETH");
-
-  console.log(
-    "Main wallet address:", wallet.address,
-    "\nBalance of this wallet:", formatEther(await wallet.getBalance())
-  );
 
   tokens = [];
 }   
 
+
+// Function to change token's pair address
+let changePairAddress = (token: Token, pairAddress: string) => {
+  let exactToken = tokens.find(t => t.address == token.address);
+  if (exactToken !== undefined){
+    tokens[tokens.indexOf(token)].pairAddress = pairAddress;
+  }
+}
 
 
 // Function to change token's state in global array
@@ -135,6 +134,7 @@ let changeOldPrice = (token: Token, oldPrice: BigNumber) => {
   }
 }
 
+
 // Function to check if the token is being bought or has already been bought
 // Returns true if the token is NOT free
 let checkBuying = (token: Token) => {
@@ -146,6 +146,7 @@ let checkBuying = (token: Token) => {
   }
   return false;
 }
+
 
 // Function to check is the token is being sold or has already been sold
 let checkSelling = (token: Token) => {
@@ -160,28 +161,68 @@ let checkSelling = (token: Token) => {
 
 
 // Function checks if it's time to sell tokens with 10x higher price
-let checkTokensPriceAndSellTokens = async () => {
-  for (let token of tokens) {
-    let currentPrice = await uniswapRouter.getAmountsOut(ethers.utils.parseEther('1'), [WETH.address, token.address]);
-    token.currentPrice = currentPrice;
-    // If new price is strictly 10+ time more than the old one
-    if (token.currentPrice.gt(token.oldPrice.mul(10))){
-      // Convert token from Token class into Contract
-      let tokenContract = await ethers.getContractAt("IERC20", token.address);
+let checkTokenPriceAndSellToken = async (token: Token) => {
+  let currentPrice = await uniswapRouter.getAmountsOut(ethers.utils.parseEther('1'), [WETH.address, token.address]);
+  token.currentPrice = currentPrice;
+  // If new price is strictly 10+ time more than the old one
+  if (token.currentPrice.gt(token.oldPrice.mul(10))){
+    console.log(`Token ${token.address} price is 10x - sell it!`);
+    // Convert token from Token class into Contract
+    let tokenContract = await ethers.getContractAt("IERC20", token.address);
 
-      // We should not wait for the sell to finish because we have to move on to other tokens in the list
-      sellToken(wallet, tokenContract, gasPrice);
-    }
+    // We should not wait for the sell to finish because we have to move on to other tokens in the list
+    sellToken(wallet, tokenContract, gasPrice);
   }
 }
 
 
 
+// Function adds events listeners for each token's pair
+let listenToPairEventsAndSellTokens = async () => {
+  console.log("Start listening to token's price changes...");
+  for (let token of tokens){
+    // TODO should I put all pair into a new list?
+    let pair = await ethers.getContractAt("IUniswapV2Pair", token.pairAddress);
+    // If either Mint or Swap event is detected in the pair - check token's price and sell it if the price is 10x
+    // Usually Mint and Swap events are emitted via addLiquidityETH or addLiquidity
+    pair.on("Mint", (sender: string, amount0: BigNumber, amount1: BigNumber) => {
+      console.log("LP tokens have been minted in the pair with address: ", pair.address);
+      checkTokenPriceAndSellToken(token);
+    })
+    pair.on("Swap", (sender: string, amount0In: BigNumber, amount1In: BigNumber, amount0Out: BigNumber, amount1Out: BigNumber, to: string) => {
+      console.log("Swap occured in the pair with address: ", pair.address);
+      checkTokenPriceAndSellToken(token);
+    })
+  }
+}
+
+
+// Function removes all events listeners from pairs
+let removePairListeners = async () => {
+  for (let token of tokens){
+    // TODO should I put all pair into a new list?
+    let pair = await ethers.getContractAt("IUniswapV2Pair", token.pairAddress);
+    pair.removeAllListeners("Mint");
+    pair.removeAllListeners("Swap");
+  }
+}
+
+
+// Function removes Mint event listeners from tokens
+let removeTokenListeners = (singleTokens: string[]) => {
+  // Remove all listeners for Mint event of tokens we are no loger interested in
+  singleTokens.forEach((token: string): void => {
+    ethers.provider.removeAllListeners({
+      address: token,
+      topics: [
+        UniswapPair.interface.getEventTopic("Mint"),
+      ],
+    });
+  });
+}
 
 // Function to buy a single token from the minted pair
 let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice: BigNumber): Promise<void> => {
-
-  console.log("tokens are: \n", tokens);
 
   console.log(
     "Buying a token:",
@@ -201,7 +242,7 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
     token.state = tokenState.Buying;
     // And add it to the list of tokens as fast as possible
     tokens.push(token);
-    console.log("a new token added to tokens!!!"); 
+    console.log("A new token added to tokens!!!"); 
   }
 
   let path: string[] = [WETH.address, singleToken.address];
@@ -226,17 +267,12 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
   // Change token's old price while it's already in the list 
   changeOldPrice(token, oldPrice);
 
-  console.log("Got it!");
-  console.log("Swap transaction:", swapTx);
+  console.log("Token bought!");
 
-  console.log(
-    "Token info after the swap:",
-    "\nBalance:", formatEther(await singleToken.balanceOf(wallet.address)),
-    "\nName:", await singleToken.name(),
-    "\nSymbol:", await singleToken.symbol(),
-  );
-
-  console.log("ETH balance after the swap:", formatEther(await wallet.getBalance()), "\n");
+  console.log("Token name: ", await singleToken.name());
+  console.log("Token symbol: ", await singleToken.sumbol());
+  console.log("Token balance of the wallet: ", formatEther(await singleToken.balanceOf(wallet.address)));
+  console.log("WETH balance of the wallet:", formatEther(await wallet.getBalance()), "\n");
 }
 
 
@@ -282,10 +318,12 @@ let sellToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPric
   // Changes token's state to Sold only in that function
   changeState(token, tokenState.Sold);
 
-  console.log("Got it!");
-  console.log("Swap transaction:", swapTx);
+  console.log("Token sold!");
 
-  console.log("ETH balance after the swap:", formatEther(await wallet.getBalance()), "\n");
+  console.log("Token name: ", await singleToken.name());
+  console.log("Token symbol: ", await singleToken.sumbol());
+  console.log("Token balance of the wallet: ", formatEther(await singleToken.balanceOf(wallet.address)));
+  console.log("ETH balance of the wallet:", formatEther(await wallet.getBalance()), "\n");
 }
 
 
@@ -314,7 +352,6 @@ let waitMintAndBuyToken = (pair: Contract, wallet: SignerWithAddress, singleToke
 // Function updates the list of desired tokens and logs it into the file
 // Runs on EACH update of tokens.txt file
 const buyAndUpdateSingleTokens = async (pair: Contract, wallet: SignerWithAddress, singleToken: Contract, gasPrice: BigNumber): Promise<void> => {
-
   // Get tokens addresses from the local tokens.txt file
   let tokensFromFile: string[] = fs.readFileSync(FILE_WITH_TOKENS)
     .toString()
@@ -324,6 +361,12 @@ const buyAndUpdateSingleTokens = async (pair: Contract, wallet: SignerWithAddres
     .filter(ethers.utils.isAddress);
 
   console.log("Updated tokens list from the file:", tokensFromFile);
+
+  // Remove all listeners for Mint event of tokens
+  removeTokenListeners(singleTokens);
+
+  // Remove all listeners for Mint and Swap events of pairs we are no longer interested in
+  await removePairListeners();
 
   // Clear the list of single tokens to fill it with other addresses
   singleTokens = [];
@@ -410,9 +453,7 @@ async function main(): Promise<void> {
       "\nPair:", pairAddress,
       "\nTime:", new Date().toISOString().replace("T", " ").replace("Z", ""),
     );
-  
-    console.log("tokens are: \n", tokens);
-
+ 
     // Check if this pair is token/WETH or WETH/token
     if (!(
       (singleTokens.includes(token0Address) && token1Address == WETH.address.toLowerCase()) ||
@@ -433,8 +474,12 @@ async function main(): Promise<void> {
     // If so - that means that the token is already being processed - ignore it
     if (checkBuying(token)){
       // If it is - continue to another one
+      console.log("Token from that pair is already being processed")
       return;
     }
+
+    // Set token's pair address 
+    changePairAddress(token, pairAddress);
 
     // Check if there is any liquidity in the pair
     if ((await pair.totalSupply()).eq(0)) {
@@ -511,11 +556,10 @@ async function main(): Promise<void> {
     .on("change", buyAndUpdateSingleTokens)
     .on("unlink", () => {singleTokens = []});
 
-  // Check if it's time to sell any of tokens (and sell it)
-  checkTokensPriceAndSellTokens();
+ 
 
+  listenToPairEventsAndSellTokens();
 
-  console.log("Waiting for a new pair to be created or .txt file changed...");
 }
 
 
