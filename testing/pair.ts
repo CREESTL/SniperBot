@@ -53,6 +53,7 @@ export const createPairOfTokens = async (): Promise<void> => {
   const uniswapRouter: Contract = await ethers.getContractAt("IUniswapV2Router02", ROUTER_ADDRESS);
   const uniswapFactory: Contract = await ethers.getContractAt("IUniswapV2Factory", await uniswapRouter.factory());
   const tToken: Contract = await ethers.getContractAt("TToken", tTokenAddress);
+  const WETH: Contract = await ethers.getContractAt("IERC20", await uniswapRouter.WETH());
 
   // Before adding tokens to the pool, we need to have some of them on the wallet - mint them
   console.log("Minting 1000 TTokens to the wallet...")
@@ -62,7 +63,7 @@ export const createPairOfTokens = async (): Promise<void> => {
 
   console.log("TToken address is ", tToken.address);
   console.log("Wallet address is ", wallet.address);
-  console.log("Wallet ETH balance is ", ethers.utils.formatEther(await wallet.getBalance());
+  console.log("Wallet ETH balance is ", ethers.utils.formatEther(await wallet.getBalance()));
   console.log("Wallet TToken balance is ", ethers.utils.formatEther(await tToken.balanceOf(wallet.address)));
 
 
@@ -103,7 +104,7 @@ export const createPairOfTokens = async (): Promise<void> => {
   console.log("TToken balance of the wallet after adding:", ethers.utils.formatEther(await tToken.balanceOf(wallet.address)));
   console.log("ETH balance of the wallet after adding:", ethers.utils.formatEther(await wallet.getBalance()));
   console.log("TToken balance of the pair after adding:", ethers.utils.formatEther(await tToken.balanceOf(pairAddress)));
-  console.log("ETH balance of the pair after adding:", ethers.utils.formatEther(await pair.getBalance()));
+  console.log("ETH balance of the pair after adding:", ethers.utils.formatEther(await WETH.balanceOf(pair.address)));
 
 
   // Now we have to add liquidity to the pair in order for token/ETH price to become 10 times greater
@@ -119,8 +120,8 @@ export const createPairOfTokens = async (): Promise<void> => {
     const txResponse: TransactionResponse = await uniswapRouter.addLiquidityETH(
       tToken.address,
       amountTokenDesired,
-      ethers.utils.parseEther("1"),
-      ethers.utils.parseEther("1"),
+      ethers.utils.parseEther("0"), // Bug here
+      ethers.utils.parseEther("0"),
       wallet.address,
       Date.now() + 1000 * 60 * 10,
       {value: amountETHDesired},
@@ -133,7 +134,7 @@ export const createPairOfTokens = async (): Promise<void> => {
     console.log("TToken balance of the wallet after adding:", ethers.utils.formatEther(await tToken.balanceOf(wallet.address)));
     console.log("ETH balance of the wallet after adding:", ethers.utils.formatEther(await wallet.getBalance()));
     console.log("TToken balance of the pair after adding:", ethers.utils.formatEther(await tToken.balanceOf(pairAddress)));
-    console.log("ETH balance of the pair after adding:", ethers.utils.formatEther(await pair.getBalance()));
+    console.log("ETH balance of the pair after adding:", ethers.utils.formatEther(await WETH.balanceOf(pair.address)));
 
   }
 }
