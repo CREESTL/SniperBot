@@ -14,7 +14,8 @@ export enum tokenState{
 export class Token {
 	state: tokenState;
 	oldPrice: BigNumber;
-	currentPrice: BigNumber;	
+	currentPrice: BigNumber;
+	pairAddress: string;	
 	address: string;
 	constructor(initAddress: string, initState?: tokenState){
 		if (initState !== undefined){

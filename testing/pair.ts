@@ -120,7 +120,7 @@ export const createPairOfTokens = async (): Promise<void> => {
     const txResponse: TransactionResponse = await uniswapRouter.addLiquidityETH(
       tToken.address,
       amountTokenDesired,
-      ethers.utils.parseEther("0"), // Bug here
+      ethers.utils.parseEther("0"),
       ethers.utils.parseEther("0"),
       wallet.address,
       Date.now() + 1000 * 60 * 10,
