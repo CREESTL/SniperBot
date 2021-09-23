@@ -24,7 +24,8 @@ A brief explanation of how the script works:
 and so on...
 */
 
-// TODO lower 10x price and test selling!
+// TODO calculate old price NOT inside buyToken
+// TODO delete token from tokens after selling???
 // TODO maybe replace all token: Contract with token: Token???
 // TODO move all helper-function to a different file
 
@@ -46,9 +47,12 @@ const SWAP_AMOUNT: BigNumber = parseEther(process.env.SWAP_AMOUNT || "");
 // Path to the file with the list of desired tokens(tokens that user wants to buy)
 const FILE_WITH_TOKENS: string = "tokens.txt";
 // Max. amount of gas that suits the user
-const GAS_LIMIT: number = 300000;
+const GAS_LIMIT: BigNumber = BigNumber.from('300000');
 // Constant address of Uniswap Router in Ethereum mainnet
 const ROUTER_ADDRESS = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
+// How many times the price of the token should increase to sell the token
+// TODO change that to 10 before release
+const PRICE_RATIO = 1;
 
 
 
@@ -171,7 +175,7 @@ let checkBuying = (token: Token) => {
 let checkSelling = (token: Token) => {
   let exactToken = tokens.find(t => t.address == token.address);
   if (exactToken !== undefined){
-    if ((exactToken.state == tokenState.Buying) || (exactToken.state == tokenState.Bought)){
+    if ((exactToken.state == tokenState.Selling) || (exactToken.state == tokenState.Sold)){
       return true;
     }
   }
@@ -196,14 +200,23 @@ let checkTokenPriceAndSellToken = async (token: Token) => {
   console.log(`(checkTokenPriceAndSellToken) Token (${exactToken.address}) current price is: `, ethers.utils.formatEther(exactToken.currentPrice));
   console.log(`(checkTokenPriceAndSellToken) Token (${exactToken.address}) old price is: `, ethers.utils.formatEther(exactToken.oldPrice));
   // If new price is strictly 10+ time more than the old one
-  if (exactToken.currentPrice.gt(exactToken.oldPrice.mul(10))){ 
-    console.log(`Token ${exactToken.address} price is 10x - sell it!`);
+  if (exactToken.currentPrice.gt(exactToken.oldPrice.mul(PRICE_RATIO))){ 
+    console.log(`(checkTokenPriceAndSellToken) Token ${exactToken.address} price is ${PRICE_RATIO}x - try to sell it!`);
     // Convert token from Token class into Contract
     let tokenContract = await ethers.getContractAt("IERC20", exactToken.address);
 
     // We should not wait for the sell to finish because we have to move on to other tokens in the list
     sellToken(wallet, tokenContract, gasPrice);
   }
+}
+
+// Function to delete sold token from tokens
+let deleteToken = (token: Token) => {
+  let exactToken = tokens.find(t => t.address == token.address);
+  if (exactToken !== undefined){
+    delete tokens[tokens.indexOf(exactToken)];
+  }
+ 
 }
 
 
@@ -304,7 +317,9 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
     path,
     wallet.address, 
     Date.now() + 1000 * 60 * 10,
-    {value: SWAP_AMOUNT, gasLimit: GAS_LIMIT, gasPrice: gasPrice},
+    // Here we must specify the amount of ETH we are ready to spend and the gas price must be exactly 1 wei lower than
+    // the gas price of adding liquidity transaction
+    {value: SWAP_AMOUNT, gasPrice: gasPrice},
   );
 
   // Wait for the transaction to finish
@@ -329,7 +344,6 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
   console.log("(buyToken) Token bought!");
 
   console.log("(buyToken) Token name: ", await singleToken.name());
-  console.log("(buyToken) Token symbol: ", await singleToken.sumbol());
   console.log("(buyToken) Token balance of the wallet: ", formatEther(await singleToken.balanceOf(wallet.address)));
   console.log("(buyToken) ETH balance of the wallet:", formatEther(await wallet.getBalance()), "\n");
 }
@@ -345,8 +359,9 @@ let sellToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPric
 
   // Check if the token hasn't been sold yet (just in case)
   if (checkSelling(token)){
-     // If it has - no need to go further
-     return;
+    console.log(`(sellToken) This token ${token.address} is already being sold - CANCEL SELLING!`);
+    // If it has - no need to go further
+    return;
   }
 
   // Change token's state to Selling in the list
@@ -354,26 +369,35 @@ let sellToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPric
 
   let path: string[] = [singleToken.address, WETH.address];
 
+  // Approve transaction of twice as much tokens as there are in the wallet (just in case)
+  console.log("(sellToken) Approving selling tokens...");
+  let approveTx = await singleToken.approve(uniswapRouter.address, (await singleToken.balanceOf(wallet.address)).mul(2));
+  await approveTx.wait();
+  console.log("(sellToken) Approved!");
+
   // Swap ETH for tokens
   let swapTx: TransactionResponse = await uniswapRouter.swapExactTokensForETH(
-    singleToken.balanceOf(wallet.address), 
+    ethers.utils.parseEther("0.5"),
+    //await singleToken.balanceOf(wallet.address), 
+    // At least 1 wei should return 
     1,
     path, 
     wallet.address, 
     Date.now() + 1000 * 60 * 10,
-    {value: SWAP_AMOUNT, gasLimit: GAS_LIMIT, gasPrice: gasPrice},
+    // We don't need to specify any other parameters here
   );
 
   // Wait for the transaction to finish
   await swapTx.wait();
-
   // Changes token's state to Sold only in that function
   changeState(token, tokenState.Sold);
+
+  // Delete sold token from tokens
+  deleteToken(token);
 
   console.log("(sellToken) Token sold!");
 
   console.log("(sellToken) Token name: ", await singleToken.name());
-  console.log("(sellToken) Token symbol: ", await singleToken.sumbol());
   console.log("(sellToken) Token balance of the wallet: ", formatEther(await singleToken.balanceOf(wallet.address)));
   console.log("(sellToken) ETH balance of the wallet:", formatEther(await wallet.getBalance()), "\n");
 }
