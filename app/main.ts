@@ -24,8 +24,7 @@ A brief explanation of how the script works:
 and so on...
 */
 
-// TODO calculate old price NOT inside buyToken
-// TODO delete token from tokens after selling???
+// TODO after selling tokens there is less ETH in the wallet than before selling - increase ETH added and leave 10x
 // TODO maybe replace all token: Contract with token: Token???
 // TODO move all helper-function to a different file
 
@@ -185,6 +184,7 @@ let checkSelling = (token: Token) => {
 
 // Function checks if it's time to sell tokens with 10x higher price
 let checkTokenPriceAndSellToken = async (token: Token) => {
+  console.log("(checkTokenPriceAndSellToken) tokens are: ", tokens);
   // We have to work with the token from tokens - not just a new one
   let exactToken = tokens.find(t => t.address == token.address);
   // If the token wasn't found in tokens - there is nothing to do here
@@ -214,7 +214,7 @@ let checkTokenPriceAndSellToken = async (token: Token) => {
 let deleteToken = (token: Token) => {
   let exactToken = tokens.find(t => t.address == token.address);
   if (exactToken !== undefined){
-    delete tokens[tokens.indexOf(exactToken)];
+    tokens.splice(tokens.indexOf(exactToken), 1);
   }
  
 }
