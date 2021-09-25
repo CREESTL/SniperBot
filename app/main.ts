@@ -156,13 +156,24 @@ let checkOldPriceExists = (token: Token) => {
   return false;
 }
 
-
-// Function to check if the token is being bought or has already been bought
+// Function to check if the token is being bought
 // Returns true if the token is NOT free
 let checkBuying = (token: Token) => {
   let exactToken = tokens.find(t => t.address.toLowerCase() == token.address.toLowerCase());
   if (exactToken !== undefined){
-    if ((exactToken.state == tokenState.Buying) || (exactToken.state = tokenState.Bought)){
+    if (exactToken.state == tokenState.Buying){
+      return true;
+    }
+  }
+  return false;
+}
+
+// Function to check if the token is being bought or has already been bought
+// Returns true if the token is NOT free
+let checkBought = (token: Token) => {
+  let exactToken = tokens.find(t => t.address.toLowerCase() == token.address.toLowerCase());
+  if (exactToken !== undefined){
+    if (exactToken.state = tokenState.Bought){
       return true;
     }
   }
@@ -189,17 +200,17 @@ let checkTokenPriceAndSellToken = async (token: Token) => {
   let exactToken = tokens.find(t => t.address == token.address);
   // If the token wasn't found in tokens - there is nothing to do here
   if (exactToken === undefined){
-    return
+    return;
   }
   let bothPrices = await uniswapRouter.getAmountsOut(ethers.utils.parseEther('1'), [WETH.address, exactToken.address]);
   let currentPrice = bothPrices[1];
 
-  // Change token's state
+  // Change token's current price
   changeCurrentPrice(exactToken, currentPrice);
 
   console.log(`(checkTokenPriceAndSellToken) Token (${exactToken.address}) current price is: `, ethers.utils.formatEther(exactToken.currentPrice));
   console.log(`(checkTokenPriceAndSellToken) Token (${exactToken.address}) old price is: `, ethers.utils.formatEther(exactToken.oldPrice));
-  // If new price is strictly 10+ time more than the old one
+  // If new price is strictly PRICE_RATIO time more than the old one - we sell the token
   if (exactToken.currentPrice.gt(exactToken.oldPrice.mul(PRICE_RATIO))){ 
     console.log(`(checkTokenPriceAndSellToken) Token ${exactToken.address} price is ${PRICE_RATIO}x - try to sell it!`);
     // Convert token from Token class into Contract
@@ -210,16 +221,6 @@ let checkTokenPriceAndSellToken = async (token: Token) => {
   }
 }
 
-// Function to delete sold token from tokens
-let deleteToken = (token: Token) => {
-  let exactToken = tokens.find(t => t.address == token.address);
-  if (exactToken !== undefined){
-    tokens.splice(tokens.indexOf(exactToken), 1);
-  }
- 
-}
-
-
 // Function adds two events listeners for the pair
 let addPairListeners = async (token: Token, pairAddress: string) => {
   console.log("(PairCreated) Adding listeners for pair with address: ", pairAddress);
@@ -227,11 +228,27 @@ let addPairListeners = async (token: Token, pairAddress: string) => {
   // Usually Mint and Swap events are emitted via addLiquidityETH or addLiquidity
   pair.on("Mint", (sender: string, amount0: BigNumber, amount1: BigNumber) => {
     console.log("(addPairListeners) LP tokens have been minted in the pair with address: ", pair.address);
-    checkTokenPriceAndSellToken(token);
+    // If tokens if still in process of being bought - we ignore all events because we don't have that token in the wallet yet
+    if (checkBuying(token)){
+      console.log("(addPairListeners) A token from that pair is still in process of being bought - don't sell it");
+      return;
+    }
+    // And only if tokens have been bought - we can sell them
+    if (checkBought(token)){
+      console.log("(addPairListeners) A token from that pair has been bought - we can sell it now");
+      checkTokenPriceAndSellToken(token);
+    }
   })
   pair.on("Swap", (sender: string, amount0In: BigNumber, amount1In: BigNumber, amount0Out: BigNumber, amount1Out: BigNumber, to: string) => {
     console.log("(addPairListeners) Swap occured in the pair with address: ", pair.address);
-    checkTokenPriceAndSellToken(token);
+    if (checkBuying(token)){
+      console.log("(addPairListeners) A token from that pair is still in process of being bought - don't sell it");
+      return;
+    }
+    if (checkBought(token)){
+      console.log("(addPairListeners) A token from that pair has been bought - we can sell it now");
+      checkTokenPriceAndSellToken(token);
+    }
   })
 }
 
@@ -340,12 +357,12 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
     changeOldPrice(token, oldPrice);
   }
   
-
-  console.log("(buyToken) Token bought!");
-
-  console.log("(buyToken) Token name: ", await singleToken.name());
-  console.log("(buyToken) Token balance of the wallet: ", formatEther(await singleToken.balanceOf(wallet.address)));
-  console.log("(buyToken) ETH balance of the wallet:", formatEther(await wallet.getBalance()), "\n");
+  console.log(`
+    (buyToken) Token bought!\n
+    (buyToken) Token name: ", ${await singleToken.name()}\n
+    (buyToken) Token balance of the wallet: ${formatEther(await singleToken.balanceOf(wallet.address))}\n
+    (buyToken) ETH balance of the wallet: ${formatEther(await wallet.getBalance())} 
+    `);
 }
 
 
@@ -392,25 +409,23 @@ let sellToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPric
   // Changes token's state to Sold only in that function
   changeState(token, tokenState.Sold);
 
-  // Delete sold token from tokens
-  deleteToken(token);
-
-  console.log("(sellToken) Token sold!");
-
-  console.log("(sellToken) Token name: ", await singleToken.name());
-  console.log("(sellToken) Token balance of the wallet: ", formatEther(await singleToken.balanceOf(wallet.address)));
-  console.log("(sellToken) ETH balance of the wallet:", formatEther(await wallet.getBalance()), "\n");
+  
+  console.log(`(sellToken) Token sold!
+  (sellToken) Token name: ", ${await singleToken.name()}
+  (sellToken) Token balance of the wallet: ${formatEther(await singleToken.balanceOf(wallet.address))}
+  (sellToken) ETH balance of the wallet: ${formatEther(await wallet.getBalance())}`
+  );
 }
 
 
 // Buying token is available only after the whole pair it is in is minted
 // This function awaits that event
 let waitMintAndBuyToken = (pair: Contract, wallet: SignerWithAddress, singleToken: Contract, gasPrice: BigNumber): void => {
-    console.log("(waitMintAndBuyToken) Pair wasn't minted yet. Waiting...");
 
     // Create a new instance of Token class with token's address and state
     // We should "lock" that token's state at "Buying" while we wait for the pair to be minted
     let token = new Token(singleToken.address, tokenState.Buying);
+    // Add token to the tokens only if there is no any other token with such address that is being bought
     if (!(checkBuying(token))){
      tokens.push(token); 
     }
@@ -478,63 +493,6 @@ async function main(): Promise<void> {
 
   await initGlobals();
 
-  // Listen to the event of pair creation by someone else on the Uniswap
-  // If the pair was created - run the async function EACH time
-  // Runs in the back
-  uniswapFactory.on("PairCreated", async (token0Address: string, token1Address: string, pairAddress: string): Promise<void> => {
-
-    token0Address = token0Address.toLowerCase();
-    token1Address = token1Address.toLowerCase();
-    pairAddress = pairAddress.toLowerCase();
-
-    console.log(
-      "(PairCreated) A new pair detected:",
-      "\n(PairCreated) First token address:", token0Address,
-      "\n(PairCreated) Second token address:", token1Address,
-      "\n(PairCreated) Pair address:", pairAddress,
-    );
- 
-    // Check if this pair is token/ETH or ETH/token
-    if (!(
-      (singleTokens.includes(token0Address) && token1Address == WETH.address.toLowerCase()) ||
-      (singleTokens.includes(token1Address) && token0Address == WETH.address.toLowerCase())
-    )) {
-      console.log("(PairCreated) This pair doesn't have a target token!");
-      return;
-    }
-
-    // Update the address of the single token from the pair
-    singleToken = await ethers.getContractAt("IERC20", token0Address == WETH.address ? token1Address : token0Address);
-    // Update the address of the whole pair of tokens
-    pair = await ethers.getContractAt("IUniswapV2Pair", pairAddress);
-
-    let token = new Token(singleToken.address);
-
-    // As soon as the pair is created - we add two listeners for it
-    await addPairListeners(token, pairAddress)
-
-    // "PairCreated" event could have been called inside of addLiquidity() or addLiquidityETH() transactions
-    // If so - that means that the token is already being processed - ignore it
-    if (checkBuying(token)){
-      // If it is - continue to another one
-      console.log("(PairCreated) Token from that pair is already being processed")
-      return;
-    }
-
-    // Set token's pair address 
-    changePairAddress(token, pairAddress);
-
-    // Check if there is any liquidity in the pair
-    if ((await pair.totalSupply()).eq(0)) {
-      // If there is not - wait for the pair to be minted and buy desired token from the pair
-      await waitMintAndBuyToken(pair, wallet, singleToken, gasPrice);
-    } else {
-      // If there is - buy desired token from the pair
-      await buyToken(wallet, singleToken, gasPrice);
-    }
-    
-  });
-
   // Listen for pending transactions and parse them
   provider.on("pending", (tx) => {
 
@@ -551,7 +509,8 @@ async function main(): Promise<void> {
 
           // If for some reason the token is already being processed - ignore the token
           let token = new Token(parsed_data.token);
-          if (checkBuying(token)){
+
+          if (checkBuying(token) || checkBought(token)){
             return;
           }
 
@@ -569,7 +528,8 @@ async function main(): Promise<void> {
 
            // If for some reason the token is already being processed - ignore the token
           let token = new Token(parsed_data.token);
-          if (checkBuying(token)){
+          console.log("(pending) AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA token is ", token)
+          if (checkBuying(token) || checkBought(token)){
             return;
           }
 
@@ -582,6 +542,80 @@ async function main(): Promise<void> {
 
       };
     });
+  });
+
+  // Listen to the event of pair creation by someone else on the Uniswap
+  // If the pair was created - run the async function EACH time
+  // Runs in the back
+  uniswapFactory.on("PairCreated", async (token0Address: string, token1Address: string, pairAddress: string): Promise<void> => {
+
+    token0Address = token0Address.toLowerCase();
+    token1Address = token1Address.toLowerCase();
+    pairAddress = pairAddress.toLowerCase();
+    let tokenAddress;
+    let wethAddress;
+
+    console.log("(PairCreated) WETH address is", WETH.address);
+    if (token0Address == WETH.address.toLowerCase()){
+      let wethAddress = token0Address;
+    } else {
+      let tokenAddress = token0Address;
+    }
+
+    console.log(
+      "(PairCreated) A new pair detected:",
+      "\n(PairCreated) Token0 address:", token0Address,
+      "\n(PairCreated) Token1 address:", token1Address,
+      "\n(PairCreated) Pair address:", pairAddress,
+    );
+ 
+    // Check if this pair is token/ETH or ETH/token
+    if ((tokenAddress !== undefined) && (singleTokens.includes(tokenAddress))){
+      console.log("(PairCreated) This pair has a target token!");
+
+    }
+    else{
+      console.log("(PairCreated) This pair doesn't have a target token!");
+      return
+    }
+
+    // Update the address of the single token from the pair
+    singleToken = await ethers.getContractAt("IERC20", tokenAddress);
+
+    console.log("(PairCreated) AAAAAAAAAAa singleTokenAddress is", singleToken.address);
+
+    // Update the address of the whole pair of tokens
+    pair = await ethers.getContractAt("IUniswapV2Pair", pairAddress);
+
+    let token = new Token(singleToken.address);
+
+    // As soon as the pair is created - we add two listeners for it
+    await addPairListeners(token, pairAddress)
+
+    // Set token's pair address 
+    changePairAddress(token, pairAddress);
+
+    // "PairCreated" event could have been called inside of addLiquidity() or addLiquidityETH() transactions
+    // If so - that means that the token is already being bought, but we don't have it yet
+    if (checkBuying(token)){
+      // If it is - continue to another one
+      console.log("(PairCreated) Token from that pair is already being processed")
+      return;
+    }
+
+    // Check if there is any liquidity in the pair 
+    // (if any LP tokens have been minted)
+    if ((await pair.totalSupply()).eq(0)) {
+      // If there is not - wait for the pair to be minted and buy desired token from the pair
+      console.log("(PairCreated) Pair wasn't minted yet. Waiting...");
+      await waitMintAndBuyToken(pair, wallet, singleToken, gasPrice);
+    } else {
+      // If there is - buy desired token from the pair
+      // TODO for some reason here SingleToken is ETH...
+      console.log("(PairCreated) Pair has been minted - we can buy tokens from it now!");
+      await buyToken(wallet, singleToken, gasPrice);
+    }
+    
   });
 
 
