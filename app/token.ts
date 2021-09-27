@@ -2,7 +2,6 @@
 import { BigNumber } from "ethers";
 
 export enum tokenState{
-	Free,
 	Buying,
 	Bought,
 	Selling,
