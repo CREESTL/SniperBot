@@ -24,9 +24,7 @@ A brief explanation of how the script works:
 and so on...
 */
 
-// TODO if swap and LP mint happen too fast - it tries to sell token 2 times - change Selling and Buying status not inside Buy and Sell functions? OR just
-// add another state line Busy to the token and change to that state if the token is neither check buying nor check selling but checking something... And
-// check for Busy very often
+
 
 // TODO after selling tokens there is less ETH in the wallet than before selling - increase ETH added and leave 10x
 // TODO maybe replace all token: Contract with token: Token???
@@ -105,6 +103,7 @@ let initGlobals = async (): Promise<void> => {
 
   // Get the first wallet to work with (user's wallet)
   let wallets: SignerWithAddress[] = await ethers.getSigners();
+  // Use [0] wallet here. In any other scripts [1][2]... are used to avoid balance conflicts...
   wallet = wallets[0];
 
   WETH = await ethers.getContractAt("IWETH", await uniswapRouter.WETH());
@@ -417,7 +416,6 @@ let sellToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPric
 
   // Swap ETH for tokens
   let swapTx: TransactionResponse = await uniswapRouter.swapExactTokensForETH(
-    //ethers.utils.parseEther("0.5"),
     await singleToken.balanceOf(wallet.address), 
     // At least 1 wei should return 
     1,
@@ -517,6 +515,8 @@ async function main(): Promise<void> {
   console.log("*Beep* Starting the bot! *Beep* \n");
 
   await initGlobals();
+
+  console.log("Wallet address is: ", wallet.address);
 
   // Listen for pending transactions and parse them
   provider.on("pending", (tx) => {
@@ -624,7 +624,7 @@ async function main(): Promise<void> {
     // If it has - exit 
    if (checkBuying(token) || checkBought(token) || checkSelling(token) || checkSold(token)){
       // If it is - continue to another one
-      console.log("(PairCreated) Token from that pair has been processes - cancel buying!");
+      console.log("(PairCreated) Token from that pair has been processed - cancel buying!");
       return;
     }
 
