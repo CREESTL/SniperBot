@@ -50,7 +50,7 @@ const config: HardhatUserConfig = {
       // Create 20 Signers with 1000 wei(not ETH!!!) each
       accounts: {
         count: 20,
-        accountsBalance: ethers.utils.parseEther('10000').toString(),
+        accountsBalance: ethers.utils.parseEther('1000').toString(),
       },
       // Each new block in mined once in 10 seconds
       mining: {
