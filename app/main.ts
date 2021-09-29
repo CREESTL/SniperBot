@@ -24,9 +24,10 @@ A brief explanation of how the script works:
 and so on...
 */
 
+// TODO Increase to 10x 
+// TODO check that buying in the same block
 
 
-// TODO after selling tokens there is less ETH in the wallet than before selling - increase ETH added and leave 10x
 // TODO maybe replace all token: Contract with token: Token???
 // TODO move all helper-function to a different file
 
@@ -52,8 +53,9 @@ const GAS_LIMIT: BigNumber = BigNumber.from('300000');
 // Constant address of Uniswap Router in Ethereum mainnet
 const ROUTER_ADDRESS = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 // How many times the price of the token should increase to sell the token
+// MUST be integer!
 // TODO change that to 10 before release
-const PRICE_RATIO = 1;
+const PRICE_RATIO = 2;
 
 
 
@@ -220,6 +222,7 @@ let checkTokenPriceAndSellToken = async (token: Token) => {
   if (exactToken === undefined){
     return;
   }
+  
   let bothPrices = await uniswapRouter.getAmountsOut(ethers.utils.parseEther('1'), [WETH.address, exactToken.address]);
   let currentPrice = bothPrices[1];
 

@@ -9,8 +9,7 @@ import { pack, keccak256 } from '@ethersproject/solidity';
 import { getInitCodeHashForPair } from "./init_code";
 
 
-// The amount of ETH to be thrown from one wallet to another to create pending transactions
-const SWAP_UNITS = 1;
+
 // Gas limit for transactions
 const GAS_LIMIT = 1000000
 
@@ -20,9 +19,10 @@ const FILE_WITH_TOKENS: string = "tokens.txt";
 // Constant address of Uniswap Router in Ethereum mainnet
 const ROUTER_ADDRESS = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 
-// The amount of token to add to the pair
+
+// The amount of token to add to the pair each iteration
 const amountTokenDesired: BigNumber = ethers.utils.parseEther("1");
-// The amount of ETH to add to the pair
+// The amount of ETH to add to the pair each iteration
 const amountETHDesired: BigNumber = ethers.utils.parseEther("1"); 
 
 
@@ -82,16 +82,15 @@ export const createPairOfTokens = async (): Promise<void> => {
     // All following amounts are measured in wei (not ETH!!!)
     // The token that receives that liquidity
     tToken.address,
-    // The amount of tokens to add to the pool if there is less tokens than ETH in the pool
+    // The amount of Tokens to add to the pool if WETH is as much cheaper than the Token as more ETH we are about to add to the pool than the Token
     amountTokenDesired,
-    // If ETH/token price goes up to 1/1 ratio - the transaction reverts
     ethers.utils.parseEther("0"),
     ethers.utils.parseEther("0"),
     // Recipient of the liquidity tokens
     wallet.address,
     // Deadline after which the transaction reverts
     Date.now() + 1000 * 60 * 10,
-    // the amount of ETH to add to the pool if there is less ETH than tokens in the pool
+    // the amount of ETH to add to the pool if Token is as much cheaper than the ETH as more Tokens we are about to add to the pool than ETH
     {value: amountETHDesired}, // Single ETH
   );
 
