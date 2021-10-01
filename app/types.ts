@@ -29,3 +29,5 @@ export interface ContractData {
 // TODO make an interface for configuration that is loaded from .yaml file
 // now this is done via .env
 export interface Config {}
+
+export type yamlToken = {[key: string]: string[]}
