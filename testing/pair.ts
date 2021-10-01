@@ -2,11 +2,13 @@ import { Signer, ContractFactory, Contract, BigNumber, providers, Wallet} from "
 import hardhat from "hardhat";
 const { ethers } = hardhat;
 import fs from "fs";
+import * as yaml from 'js-yaml';
 import type { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import type { TransactionResponse, TransactionReceipt, Log } from "@ethersproject/abstract-provider";
 import type { TransactionReceiptWithEvents, ContractData} from "./types";
 import { pack, keccak256 } from '@ethersproject/solidity';
 import { getInitCodeHashForPair } from "./init_code";
+import { loadConfig, loadSingleTokens, writeSingleTokens } from "./utils";
 
 
 
@@ -15,6 +17,8 @@ const GAS_LIMIT = 1000000
 
 // Path to the file with the list of desired tokens(tokens that user wants to buy)
 const FILE_WITH_TOKENS: string = "tokens.txt";
+
+const YAML_FILE_WITH_TOKENS: string = "tokens.yaml";
 
 // Constant address of Uniswap Router in Ethereum mainnet
 const ROUTER_ADDRESS = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
@@ -43,12 +47,16 @@ export const createPairOfTokens = async (): Promise<void> => {
     let tToken: Contract = await TToken.deploy("TToken", "TT", 18); // 1 TToken = 10^18 wei
     await tToken.deployed();
     console.log("TToken deployed successfully!");
-
-    // Write the address of the deployed token into the local .txt file
-    fs.writeFileSync(FILE_WITH_TOKENS, tToken.address);
-
+    // Write the address of the deployed token into the local .yaml file
+    let data = {
+      Uniswap: [
+        `${tToken.address}`,
+      ]
+    };
+    writeSingleTokens(YAML_FILE_WITH_TOKENS, data);
     return tToken.address;
   }
+
 
   // In order to create a *some token* / ETH pair on local fork of Uniswap we have to deploy that token first
   const tTokenAddress: string = await deployTToken();

@@ -24,11 +24,12 @@ A brief explanation of how the script works:
 and so on...
 */
 
+// TODO now loadSingleTokens reads old tokens addresses thought pair.ts writes correct new addresses
+
 // TODO Add the same VALUE of tokens to the pool at the beginning - not AMOUNT
 // TODO Increase to 10x 
-// TODO check that buying in the same block
 
-
+// TODO delete all .txt files and references whem .yaml is working
 // TODO maybe replace all token: Contract with token: Token???
 // TODO move all helper-function to a different file
 
@@ -40,8 +41,8 @@ let { ethers } = hardhat;
 let { formatEther, parseEther } = ethers.utils;
 import type { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import type { TransactionResponse, TransactionReceipt, Log, Provider } from "@ethersproject/abstract-provider";
-import type { TransactionReceiptWithEvents, ContractData, Config } from "./types";
-import { getContractFactory } from "./utils";
+import type { TransactionReceiptWithEvents, ContractData, Config, yamlToken } from "./types";
+import { getContractFactory, loadSingleTokens, loadConfig, writeSingleTokens } from "./utils";
 import { tokenState, Token } from "./token";
 
 
@@ -49,6 +50,7 @@ import { tokenState, Token } from "./token";
 const SWAP_AMOUNT: BigNumber = parseEther(process.env.SWAP_AMOUNT || "");
 // Path to the file with the list of desired tokens(tokens that user wants to buy)
 const FILE_WITH_TOKENS: string = "tokens.txt";
+const YAML_FILE_WITH_TOKENS: string = "tokens.yaml";
 // Max. amount of gas that suits the user
 const GAS_LIMIT: BigNumber = BigNumber.from('300000');
 // Constant address of Uniswap Router in Ethereum mainnet
@@ -480,12 +482,11 @@ let waitMintAndBuyToken = (pair: Contract, wallet: SignerWithAddress, singleToke
 // Runs on EACH update of tokens.txt file
 const buyAndUpdateSingleTokens = async (pair: Contract, wallet: SignerWithAddress, singleToken: Contract, gasPrice: BigNumber): Promise<void> => {
   // Get tokens addresses from the local tokens.txt file
-  let tokensFromFile: string[] = fs.readFileSync(FILE_WITH_TOKENS)
-    .toString()
-    .toLowerCase()
-    .split("\n")
-    .map((item: string) => item.trim())
-    .filter(ethers.utils.isAddress);
+  // TODO add pancakeswap here
+  let yamlTokensFromFile = loadSingleTokens(YAML_FILE_WITH_TOKENS);
+  let uniswapTokens = yamlTokensFromFile["Uniswap"] ? yamlTokensFromFile["Uniswap"] : [];
+  let singleTokens = uniswapTokens;
+  console.log('zhpaaaa', uniswapTokens);
 
   // Remove all listeners for Mint event of tokens
   removeTokenListeners(singleTokens);
@@ -496,7 +497,7 @@ const buyAndUpdateSingleTokens = async (pair: Contract, wallet: SignerWithAddres
   // Clear the list of single tokens to fill it with other addresses
   singleTokens = [];
 
-  for (let token of tokensFromFile) {
+  for (let token of singleTokens) {
 
     // Get a ETH/token pair
     let pairAddress: string = await uniswapFactory.getPair(WETH.address, token);
