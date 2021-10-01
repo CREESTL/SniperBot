@@ -24,6 +24,7 @@ A brief explanation of how the script works:
 and so on...
 */
 
+// TODO Add the same VALUE of tokens to the pool at the beginning - not AMOUNT
 // TODO Increase to 10x 
 // TODO check that buying in the same block
 
@@ -55,7 +56,7 @@ const ROUTER_ADDRESS = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
 // How many times the price of the token should increase to sell the token
 // MUST be integer!
 // TODO change that to 10 before release
-const PRICE_RATIO = 2;
+const PRICE_RATIO = 1;
 
 
 
@@ -87,7 +88,6 @@ let tokens: Token[];
 
 
 
-
 // Function to initialize global variables with som values
 let initGlobals = async (): Promise<void> => {
 
@@ -115,6 +115,16 @@ let initGlobals = async (): Promise<void> => {
 
   tokens = [];
 }   
+
+
+
+// Function return the number of block the transaction was mined at
+let getTransactionBlock = async (txHash: string) => {
+  // Receipt is only available for mined transactions
+  let txReceipt = await provider.getTransactionReceipt(txHash);
+  let blockNumber = txReceipt.blockNumber;
+  return blockNumber;
+}
 
 
 // Function to change token's pair address
@@ -305,7 +315,6 @@ let checkParsedData = (parsedData: any) => {
 // Function removes all events listeners from pairs
 let removePairListeners = async () => {
   for (let token of tokens){
-    // TODO should I put all pair into a new list?
     let pair = await ethers.getContractAt("IUniswapV2Pair", token.pairAddress);
     pair.removeAllListeners("Mint");
     pair.removeAllListeners("Swap");
@@ -365,6 +374,8 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
   // Wait for the transaction to finish
   // It is important because only then there will be liquidity in the pair
   await swapTx.wait();
+
+  console.log("(buyToken) Token buying transaction was mined at block: ", await getTransactionBlock(swapTx.hash));
 
   console.log(
     `(buyToken) Token bought!\n`,
@@ -528,8 +539,6 @@ async function main(): Promise<void> {
 
       let {data} = transaction;
 
-      // TODO find a more fancy way to handle this
-
       if (data != "0x"){
         try {
           let parsed_data = await parseAddLiquidityDataField(data);
@@ -543,8 +552,9 @@ async function main(): Promise<void> {
           if (checkParsedData(parsed_data)) {
             console.log("(Pending) This pending AddLiquidity transaction is the one we need!");
             let tokenContract = await ethers.getContractAt("IERC20", token.address.toLowerCase());
-            // TODO Do I need to wait for the new block to be mined?
             await buyToken(wallet, tokenContract, gasPrice.sub(1));
+            // Only after buying token we have to wait to get pending transaction's block number
+            console.log("(Pending) Pending AddLiquidity transaction was mined at block: ", await getTransactionBlock(transaction.hash));
 
           }
         }catch(e){};
@@ -561,13 +571,16 @@ async function main(): Promise<void> {
           if (checkParsedData(parsed_data)) {
             console.log("(Pending) This pending AddLiquidityETH transaction is the one we need!");
             let tokenContract = await ethers.getContractAt("IERC20", token.address.toLowerCase());
-            // TODO Do I need to wait for the new block to be mined?
             await buyToken(wallet, tokenContract, gasPrice.sub(1));
+            // Only after buying token we have to wait to get pending transaction's block number
+            console.log("(Pending) Pending AddLiquidityETH transaction was mined at block: ", await getTransactionBlock(transaction.hash));
           }
         }catch(e){};
 
       };
+
     });
+
   });
 
   // Listen to the event of pair creation by someone else on the Uniswap
@@ -639,7 +652,6 @@ async function main(): Promise<void> {
       await waitMintAndBuyToken(pair, wallet, singleToken, gasPrice);
     } else {
       // If there is - buy desired token from the pair
-      // TODO for some reason here SingleToken is ETH...
       console.log("(PairCreated) Pair has already been minted - we can buy tokens from it now!");
       await buyToken(wallet, singleToken, gasPrice);
     }
