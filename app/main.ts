@@ -24,12 +24,9 @@ A brief explanation of how the script works:
 and so on...
 */
 
-// TODO now loadSingleTokens reads old tokens addresses thought pair.ts writes correct new addresses
 
 // TODO Add the same VALUE of tokens to the pool at the beginning - not AMOUNT
 // TODO Increase to 10x 
-
-// TODO delete all .txt files and references whem .yaml is working
 // TODO maybe replace all token: Contract with token: Token???
 // TODO move all helper-function to a different file
 
@@ -49,7 +46,6 @@ import { tokenState, Token } from "./token";
 // Max. amount of ETH the user is ready to spend
 const SWAP_AMOUNT: BigNumber = parseEther(process.env.SWAP_AMOUNT || "");
 // Path to the file with the list of desired tokens(tokens that user wants to buy)
-const FILE_WITH_TOKENS: string = "tokens.txt";
 const YAML_FILE_WITH_TOKENS: string = "tokens.yaml";
 // Max. amount of gas that suits the user
 const GAS_LIMIT: BigNumber = BigNumber.from('300000');
@@ -479,14 +475,14 @@ let waitMintAndBuyToken = (pair: Contract, wallet: SignerWithAddress, singleToke
 
 // Main farming function
 // Function updates the list of desired tokens and logs it into the file
-// Runs on EACH update of tokens.txt file
+// Runs on EACH update of tokens.yaml file
 const buyAndUpdateSingleTokens = async (pair: Contract, wallet: SignerWithAddress, singleToken: Contract, gasPrice: BigNumber): Promise<void> => {
-  // Get tokens addresses from the local tokens.txt file
+  // Get tokens addresses from the local tokens.yaml file
   // TODO add pancakeswap here
   let yamlTokensFromFile = loadSingleTokens(YAML_FILE_WITH_TOKENS);
+  // TODO Do I need to separate those in 2 parts or I can just work with all of them together?
   let uniswapTokens = yamlTokensFromFile["Uniswap"] ? yamlTokensFromFile["Uniswap"] : [];
-  let singleTokens = uniswapTokens;
-  console.log('zhpaaaa', uniswapTokens);
+  // let pancakeswapTokens = ...
 
   // Remove all listeners for Mint event of tokens
   removeTokenListeners(singleTokens);
@@ -497,7 +493,7 @@ const buyAndUpdateSingleTokens = async (pair: Contract, wallet: SignerWithAddres
   // Clear the list of single tokens to fill it with other addresses
   singleTokens = [];
 
-  for (let token of singleTokens) {
+  for (let token of uniswapTokens) {
 
     // Get a ETH/token pair
     let pairAddress: string = await uniswapFactory.getPair(WETH.address, token);
@@ -661,11 +657,10 @@ async function main(): Promise<void> {
 
 
   // Listen for updates of the file with tokens addresses
-  chokidar.watch(FILE_WITH_TOKENS)
+  chokidar.watch(YAML_FILE_WITH_TOKENS)
     .on("add", buyAndUpdateSingleTokens)
     .on("change", buyAndUpdateSingleTokens)
     .on("unlink", () => {singleTokens = []});
-
 }
 
 
