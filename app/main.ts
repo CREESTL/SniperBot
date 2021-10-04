@@ -26,7 +26,6 @@ and so on...
 
 
 // TODO Add the same VALUE of tokens to the pool at the beginning - not AMOUNT
-// TODO Increase to 10x 
 // TODO maybe replace all token: Contract with token: Token???
 // TODO move all helper-function to a different file
 
@@ -44,7 +43,7 @@ import { tokenState, Token } from "./token";
 
 
 // Max. amount of ETH the user is ready to spend
-const SWAP_AMOUNT: BigNumber = parseEther(process.env.SWAP_AMOUNT || "");
+const ETH_SWAP_AMOUNT: BigNumber = parseEther(process.env.ETH_SWAP_AMOUNT || "");
 // Path to the file with the list of desired tokens(tokens that user wants to buy)
 const YAML_FILE_WITH_TOKENS: string = "tokens.yaml";
 // Max. amount of gas that suits the user
@@ -366,7 +365,7 @@ let buyToken = async (wallet: SignerWithAddress, singleToken: Contract, gasPrice
     Date.now() + 1000 * 60 * 10,
     // Here we must specify the amount of ETH we are ready to spend and the gas price must be exactly 1 wei lower than
     // the gas price of adding liquidity transaction
-    {value: SWAP_AMOUNT, gasPrice: gasPrice},
+    {value: ETH_SWAP_AMOUNT, gasPrice: gasPrice},
   );
 
   // Wait for the transaction to finish
