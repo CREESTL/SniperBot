@@ -22,6 +22,8 @@ const RINKEBY_PRIVATE_KEY = process.env.RINKEBY_PRIVATE_KEY;
 
 const FORK_URL = `https://mainnet.infura.io/v3/${INFURA_PROJECT_ID}`;
 
+const randomWallet = ethers.Wallet.createRandom().privateKey;
+
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",
   solidity: {
@@ -58,7 +60,7 @@ const config: HardhatUserConfig = {
     testnet: {
       url: "https://data-seed-prebsc-1-s1.binance.org:8545",
       chainId: 97,
-      accounts: []
+      accounts: [randomWallet]
     },
 
     // Mainnets
