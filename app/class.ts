@@ -13,94 +13,77 @@ import type { TransactionResponse, TransactionReceipt, Log, Provider } from "@et
 import type { TransactionReceiptWithEvents, ContractData, Config, yamlToken } from "./types";
 import { getContractFactory, loadSingleTokens, loadConfig, writeSingleTokens } from "./utils";
 import { tokenState, Token } from "./token";
+import * as utils from "./utils";
+
+
+// TODO Change all testnets for mainnets before deploy
+
+// TODO Check if process.env type suits variables
+
+// TODO create providers first of all
+
+// TODO do I need 2 wallets or just one?
+
+
+// User's wallets for different chains
+const ethWallet = new ethers.Wallet(process.env.ETH_PRIVATE_KEY || '');
+const bscWallet = new ethers.Wallet(process.env.BSC_PRIVATE_KEY || '');
+// The amount of tokens user is ready to spend
+const ETH_SWAP_AMOUNT: BigNumber = ethers.utils.parseEther(process.env.ETH_SWAP_AMOUNT || '0');
+const BNB_SWAP_AMOUNT: BigNumber = ethers.utils.parseEther(process.env.BNB_SWAP_AMOUNT || '0');
+// Limit of gas
+const GAS_LIMIT: BigNumber = ethers.utils.parseEther(process.env.GAS_LIMIT || '0');
+// token/baseToken price ratio that has to bee reached to sell the token
+const PRICE_RATIO: number = +(process.env.PRICE_RATIO || '1');
+console.log("Type of PRICE_RATIO is ", typeof PRICE_RATIO);
+
+// Path to local .yaml file with token addresses
+const YAML_FILE_WITH_TOKENS: string = "tokens.yaml";
+
+// Addresses of Router in different chains
+const routerAddresses: { [key: string]: string } = {
+  mainnet: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+  kovan: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+  rinkeby: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+  bsc_mainnet: "0x10ED43C718714eb63d5aA57B78B54704E256024E",
+  bsc_testnet: "0xD99D1c33F9fC3444f8101754aBC46c52416550D1",
+}
+
+const uniswapRouterAddress: string = routerAddresses['mainnet']
+const pancakeswapRouterAddress: string = routerAddresses['bsc_testnet']
+
+// Routers have different addresses so they have to be different variables
+const uniswapRouter: Contract = await ethers.getContractAt("IUniswapV2Router02", uniswapRouterAddress);
+const pancakeswapRouter: Contract = await ethers.getContractAt("IPancakeRouter02", pancakeswapRouterAddress);
+	
+// Factories are initialized using each router's method - so they also have different addresses and have to be different variables
+const uniswapFactory: Contract = await ethers.getContractAt("IUniswapV2Factory", await uniswapRouter.factory());
+const pancakeswapFactory: Contract = await ethers.getContractAt("IPancakeFactory", await pancakeswapRouter.factory());
+
+// Pairs are using two differente wallets (signers) 
+const uniswapPair: ContractFactory = await getContractFactory("IUniswapV2Pair", ethWallet);
+const pancakeswapPair: ContractFactory = await getContractFactory("IPancakePair", bscWallet);
+
+// A base token for both platforms implements the same interface - IWETH
+const baseToken: Contract = await ethers.getContractAt("IWETH", await uniswapRouter.WETH());
+
+// List of tokens without a pair
+let singleTokens: string[];
+
+// A list of Token class objects to work with
+let tokens: Token[];
+
+
 
 
 class BotHead {
-	// The name of the current platform to work with: Uniswap or Pancakeswap
-	platform: string;
-	// The amount of tokens user is ready to spend
-	SWAP_AMOUNT: BigNumber;
-	// Path to local .yaml file with token addresses
-	YAML_FILE_WITH_TOKENS: string;
-	// TODO For BSC too?
-	// Limit of gas
-	GAS_LIMIT: BigNumber;
-	// Address of router
-	ROUTER_ADDRESS: string;
-	// token/baseToken price ratio that has to bee reached to sell the token
-	// MUST be an integer!
-	PRICE_RATIO: number;
-	// List of tokens without a pair
-	singleTokens: string[];
-	// A router for the platform
-	router: Contract;
-	// A contract factory for the platform
-	factory: Contract;
-	// A pair (WETH/ERC-20 or WBNB/BEP-20)
-	pair: ContractFactory;
-	// A base token for the platform (WETH or WBNB)
-	baseToken: Contract;
-	// Address of the wallet of the user
-	wallet: SignerWithAddress;
-	// A list of Token class objects to work with
-	tokens: Token[];
 
-	// Constructor only requires one argument - the nae of the platform (swap)
-	constructor(platform: string){
-		if (!((platform == "Uniswap") || (platform == "PancakeSwap"))){
-			throw Error("Incorrect platform name! Please enter 'Uniswap' or 'PancakeSwap'.");
-		}
-		this.platform = platform;
-	}
-
-	// Function initializes veriables of the class
-	async initConsts() {
-		// Some consts are similar for both platforms
-
-		// Path to the file with the list of desired tokens(tokens that user wants to buy)
-		this.YAML_FILE_WITH_TOKENS = "tokens.yaml";
-		// At first the list must be empty
-	  this.singleTokens = [];
-	  // TODO initialize wallet (signer) here
-	  // this.wallet = ...
-	  this.tokens = [];
-		
-		// Some consts are unique for each platform
-		if (this.platform == "Uniswap"){
-			this.SWAP_AMOUNT = parseEther(process.env.ETH_SWAP_AMOUNT || "");
-			this.GAS_LIMIT = BigNumber.from('300000');
-			this.ROUTER_ADDRESS = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
-			this.PRICE_RATIO = 1;
-		  this.router = await ethers.getContractAt("IUniswapV2Router02", this.ROUTER_ADDRESS);
-		  // Both WBNB and WETH implement the same IWETH interface
-	  	this.baseToken = await ethers.getContractAt("IWETH", await this.router.WETH());
-		  this.factory = await ethers.getContractAt("IUniswapV2Factory", await this.router.factory());
-		  this.pair = await getContractFactory("IUniswapV2Pair", this.wallet);
-		}
-
-		if (this.platform == "PancakeSwap"){
-			this.SWAP_AMOUNT = parseEther(process.env.BNB_SWAP_AMOUNT || "");
-			// TODO Do I need gas here?
-			this.GAS_LIMIT = BigNumber.from('300000');
-			this.ROUTER_ADDRESS = "0x10ed43c718714eb63d5aa57b78b54704e256024e";
-			this.PRICE_RATIO = 1;
-		  this.router = await ethers.getContractAt("IPancakeRouter02", this.ROUTER_ADDRESS);
-		  // Both WBNB and WETH implement the same IWETH interface
-	  	this.baseToken = await ethers.getContractAt("IWETH", await this.router.WETH());
-		  this.factory = await ethers.getContractAt("IPancakeFactory", await this.router.factory());
-		  this.pair = await getContractFactory("IUniswapV2Pair", this.wallet);
-		}
-
-
-	}
 
 }
 
 
 async function main(){
-	let bot = new BotHead('PancakeSwap');
-	await bot.initConsts();
-	console.log("nice");
+
 }
 
 main()
