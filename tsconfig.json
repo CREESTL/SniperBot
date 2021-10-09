@@ -11,6 +11,6 @@
       "ES2020.Promise"
     ]
   },
-  "include": ["./scripts", "./test", "./app", "./testing"],
+  "include": ["./app", "./testing"],
   "files": ["./hardhat.config.ts"]
 }
