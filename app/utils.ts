@@ -47,7 +47,6 @@ export function writeSingleTokens(path: string, formatedTokens:any) {
 
 
 // =======================================
-// TODO Delete these if not used
 
 let provider: Contract;
 let tokens: Token[];
