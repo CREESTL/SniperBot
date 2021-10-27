@@ -4,7 +4,7 @@ dotEnvConfig();
 
 import fs from "fs";
 import chokidar from "chokidar";
-import { Signer, ContractFactory, Contract, BigNumber, providers, Wallet} from "ethers";
+import { Signer, ContractFactory, Contract, BigNumber, providers, Wallet } from "ethers";
 
 const { ethers } = require("hardhat");
 
@@ -54,37 +54,44 @@ async function init(){
 	const uniswapRouterAddress = routerAddresses['mainnet'];
 	const pancakeswapRouterAddress = routerAddresses['bsc_testnet'];
 
-	// Providers for Ethereum and BSC mainnets
-	ethProvider = new ethers.providers.JsonRpcProvider('https://main-light.eth.linkpool.io/');
-	bscProvider = new ethers.providers.JsonRpcProvider('https://bsc-dataseed.binance.org/');
-	// Routers for different chains
-	ethRouter = await ethers.getContractAt("IUniswapV2Router02", uniswapRouterAddress, ethProvider);
-	bscRouter = await ethers.getContractAt("IPancakeRouter02", pancakeswapRouterAddress, bscProvider);
+
+	ethProvider = await ethers.getDefaultProvider();
+	//ethProvider = new ethers.providers.JsonRpcProvider('https://main-light.eth.linkpool.io/', { name: "homestead", chainId: 1 });
+	bscProvider = new ethers.providers.JsonRpcProvider('https://bsc-dataseed.binance.org/', { name: 'binance', chainId: 56 });
+
 	// User's wallets for different chains
 	ethWallet = new ethers.Wallet(process.env.ETH_PRIVATE_KEY || ethers.Wallet.createRandom().address, ethProvider);
 	bscWallet = new ethers.Wallet(process.env.BSC_PRIVATE_KEY || ethers.Wallet.createRandom().address, bscProvider);
-	// Factories for different chains
-	ethFactory = await ethers.getContractAt("IUniswapV2Factory", await ethRouter.factory(), ethProvider);
-	bscFactory = await ethers.getContractAt("IPancakeFactory", await bscRouter.factory(), bscProvider);
-	// Pairs for different chains
-	uniswapPair = await ethers.getContractAt("IUniswapV2Pair", ethWallet.address, ethProvider);
-	pancakeswapPair = await ethers.getContractAt("IPancakePair", ethWallet.address, bscProvider);
-	// A base token for both platforms implements the same interface - IWETH
-	baseToken = await ethers.getContractAt("IWETH", await ethRouter.WETH());
-	// The amount of tokens user is ready to spend
-	ETH_SWAP_AMOUNT = ethers.utils.parseEther(process.env.ETH_SWAP_AMOUNT || '0');
-	BSC_SWAP_AMOUNT = ethers.utils.parseEther(process.env.BNB_SWAP_AMOUNT || '0');
-	// Limit of gas
-	GAS_LIMIT = ethers.utils.parseEther(process.env.GAS_LIMIT || '0');
-	// token/baseToken price ratio that has to bee reached to sell the token
-	PRICE_RATIO = +(process.env.PRICE_RATIO || '1');
-	// Path to local .yaml file with token addresses
-	YAML_FILE_WITH_TOKENS = "tokens.yaml";
 
-	// List of tokens without a pair
-	singleTokens = [];
-	// A list of Token class objects to work with
-	tokens = [];
+	// Routers for different chains
+	ethRouter = await ethers.getContractAt("IUniswapV2Router02", uniswapRouterAddress, ethWallet);
+	bscRouter = await ethers.getContractAt("IPancakeRouter02", pancakeswapRouterAddress, bscWallet);
+
+	// Factories for different chains
+	// In case of ETH (we have the default provider) .factory() method is available
+	ethFactory = await ethers.getContractAt("IUniswapV2Factory", await ethRouter.factory(), ethWallet);
+	// In case of BSC we have to explicitly pass the address of the factory
+	bscFactory = await ethers.getContractAt("IPancakeFactory", '0xBCfCcbde45cE874adCB698cC183deBcF17952812', bscWallet);
+
+	// // Pairs for different chains
+	// uniswapPair = await ethers.getContractAt("IUniswapV2Pair", ethWallet.address, ethProvider);
+	// pancakeswapPair = await ethers.getContractAt("IPancakePair", ethWallet.address, bscProvider);
+	// // A base token for both platforms implements the same interface - IWETH
+	// baseToken = await ethers.getContractAt("IWETH", await ethRouter.WETH());
+	// // The amount of tokens user is ready to spend
+	// ETH_SWAP_AMOUNT = ethers.utils.parseEther(process.env.ETH_SWAP_AMOUNT || '0');
+	// BSC_SWAP_AMOUNT = ethers.utils.parseEther(process.env.BNB_SWAP_AMOUNT || '0');
+	// // Limit of gas
+	// GAS_LIMIT = ethers.utils.parseEther(process.env.GAS_LIMIT || '0');
+	// // token/baseToken price ratio that has to bee reached to sell the token
+	// PRICE_RATIO = +(process.env.PRICE_RATIO || '1');
+	// // Path to local .yaml file with token addresses
+	// YAML_FILE_WITH_TOKENS = "tokens.yaml";
+
+	// // List of tokens without a pair
+	// singleTokens = [];
+	// // A list of Token class objects to work with
+	// tokens = [];
 
 }
 
@@ -92,7 +99,6 @@ async function init(){
 
 
 class BotHead {
-
 
 	wallet: Wallet;
 	provider: Provider;
