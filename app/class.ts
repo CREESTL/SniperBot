@@ -21,13 +21,16 @@ import * as utils from "./utils";
 
 // TODO Check if process.env type suits variables
 
-// TODO previously argument 'wallet' in functions was of type "SignerWithAddress" not "Wallet"! Change if now working!
+// TODO previously argument 'wallet' in functions was of type "SignerWithAddress" not "Wallet"! Change if not working!
+// TODO change to wallet.address after changing wallets type or bring SingerWithAddress back 
+
+// TODO Invalid ENS name  == invalid address somewhere
 
 let uniswapRouterAddress: string, pancakeswapRouterAddress: string;
 let ethRouter: Contract, bscRouter: Contract;
 
 
-// TODO change treir types??
+// TODO change types??
 let ethProvider: Provider, bscProvider: Provider;
 let ethWallet: Wallet, bscWallet: Wallet;
 let ethFactory: Contract, bscFactory: Contract;
@@ -39,6 +42,8 @@ let PRICE_RATIO: number;
 let YAML_FILE_WITH_TOKENS: string;
 let singleTokens: string[];
 let tokens: Token[];
+let WETH: string;
+
 
 
 
@@ -80,6 +85,8 @@ async function init(){
 	pancakeswapPair = await ethers.getContractAt("IPancakePair", ethWallet.address, bscWallet);
 	// A base token for both platforms implements the same interface - IWETH
 	baseToken = await ethers.getContractAt("IWETH", await ethRouter.WETH());
+	// WETH address for both chains
+	WETH = await ethRouter.WETH()
 	// The amount of tokens user is ready to spend
 	ETH_SWAP_AMOUNT = ethers.utils.parseEther(process.env.ETH_SWAP_AMOUNT || '0');
 	BSC_SWAP_AMOUNT = ethers.utils.parseEther(process.env.BNB_SWAP_AMOUNT || '0');
@@ -94,6 +101,7 @@ async function init(){
 	singleTokens = [];
 	// A list of Token class objects to work with
 	tokens = [];
+
 
 	console.log("Global constants have been initialized");
 
@@ -241,7 +249,7 @@ class BotHead {
 	    return;
 	  }
 	  
-	  let bothPrices = await this.router.getAmountsOut(ethers.utils.parseEther('1'), [this.router.WETH().address, exactToken.address]);
+	  let bothPrices = await this.router.getAmountsOut(ethers.utils.parseEther('1'), [WETH, exactToken.address]);
 	  let currentPrice = bothPrices[1];
 
 	  // Change token's current price
@@ -366,7 +374,7 @@ class BotHead {
 	    tokens.push(token);
 	  }
 
-	  let path: string[] = [this.router.WETH().address, singleToken.address];
+	  let path: string[] = [WETH, singleToken.address];
 
 	  // Swap ETH for tokens
 	  let swapTx: TransactionResponse = await this.router.swapExactETHForTokens(
@@ -396,7 +404,7 @@ class BotHead {
 	  if (!this.checkOldPriceExists(token)){
 	    // Get token/ETH price before buying the token
 	    // Price is BigNumber
-	    let bothPrices = await this.router.getAmountsOut(ethers.utils.parseEther('1'), [this.router.WETH().address, token.address]);
+	    let bothPrices = await this.router.getAmountsOut(ethers.utils.parseEther('1'), [WETH, token.address]);
 	    let oldPrice = bothPrices[1];
 	    console.log("(buyToken) Old price of token is ", ethers.utils.formatEther(oldPrice), 'ETH');
 	    // Change token's old price while it's already in the list 
@@ -428,7 +436,7 @@ class BotHead {
 	  // Change token's state to Selling in the list
 	  this.changeState(token, tokenState.Selling);
 
-	  let path: string[] = [singleToken.address, this.router.WETH().address];
+	  let path: string[] = [singleToken.address, WETH];
 
 	  // Approve transaction of twice as much tokens as there are in the wallet (just in case)
 	  console.log("(sellToken) Approving selling tokens...");
@@ -487,6 +495,7 @@ class BotHead {
 	// Runs on EACH update of tokens.yaml file
 	buyAndUpdateSingleTokens = async (pair: Contract, wallet: Wallet, singleToken: Contract, gasPrice: BigNumber): Promise<void> => {
 	  // Get tokens addresses from the local tokens.yaml file
+
 	  // TODO add pancakeswap here
 	  let yamlTokensFromFile = loadSingleTokens(YAML_FILE_WITH_TOKENS);
 	  // TODO Do I need to separate those in 2 parts or I can just work with all of them together?
@@ -505,7 +514,8 @@ class BotHead {
 	  for (let token of uniswapTokens) {
 
 	    // Get a ETH/token pair
-	    let pairAddress: string = await this.factory.getPair(this.router.WETH().address, token);
+	    let pairAddress: string = await this.factory.getPair(WETH, token);
+
 	    
 	    // If address of the pair is a zero address - that means there is no liquidity on the pair yet
 	    if (pairAddress == ethers.constants.AddressZero) {
@@ -620,7 +630,7 @@ class BotHead {
 	    let tokenAddress;
 	    let wethAddress;
 
-	    if (token0Address == this.router.WETH().address.toLowerCase()){
+	    if (token0Address == WETH.toLowerCase()){
 	      wethAddress = token0Address;
 	      tokenAddress = token1Address;
 
