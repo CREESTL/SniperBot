@@ -95,6 +95,8 @@ async function init(){
 	// A list of Token class objects to work with
 	tokens = [];
 
+	console.log("Global constants have been initialized");
+
 }
 
 
@@ -108,15 +110,17 @@ class BotHead {
 	factory: Contract;
 	pair: Contract;
 	swapAmount: BigNumber;
+	headNum: number;
 
 	// Other variables are either the same for any class instance or can be recreated from the following variables
-	constructor(wallet: Wallet, router: Contract, factory: Contract, pair: Contract, swapAmount: BigNumber){
+	constructor(wallet: Wallet, router: Contract, factory: Contract, pair: Contract, swapAmount: BigNumber, num: number){
 		this.wallet = wallet;
 		this.provider = this.wallet.provider;
 		this.router = router;
 		this.factory = factory;
 		this.pair = pair;
 		this.swapAmount = swapAmount;
+		this.headNum = num;
 	}
 
 
@@ -523,6 +527,16 @@ class BotHead {
 	  }
 	}
 
+
+
+
+	/*
+	
+	Main function
+	
+	*/
+
+
 	async watch(){
 
 
@@ -531,6 +545,8 @@ class BotHead {
 		Provider block (pending transactions)
 
 		*/
+
+		console.log(`Bot head №${this.headNum} starts working...`);
 
 		// Listen for pending transactions and parse them
 	  this.provider.on("pending", (tx) => {
@@ -687,8 +703,9 @@ class BotHead {
 
 async function main(){
 	await init();
-	let firstHead = new BotHead(ethWallet, ethRouter, bscFactory, uniswapPair, ETH_SWAP_AMOUNT);
-	console.log("Nice");
+	let firstHead = new BotHead(ethWallet, ethRouter, bscFactory, uniswapPair, ETH_SWAP_AMOUNT, 1);
+	firstHead.watch();
+
 }
 
 
