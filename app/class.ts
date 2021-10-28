@@ -24,7 +24,7 @@ import * as utils from "./utils";
 // TODO previously argument 'wallet' in functions was of type "SignerWithAddress" not "Wallet"! Change if not working!
 // TODO change to wallet.address after changing wallets type or bring SingerWithAddress back 
 
-// TODO Invalid ENS name  == invalid address somewhere
+// TODO Invalid ENS name  == invalid address somewher 
 
 let uniswapRouterAddress: string, pancakeswapRouterAddress: string;
 let ethRouter: Contract, bscRouter: Contract;
@@ -58,12 +58,15 @@ async function init(){
 	  bsc_testnet: "0xD99D1c33F9fC3444f8101754aBC46c52416550D1",
 	}
 	const uniswapRouterAddress = routerAddresses['mainnet'];
-	const pancakeswapRouterAddress = routerAddresses['bsc_testnet'];
+	const pancakeswapRouterAddress = routerAddresses['bsc_mainnet'];
 
 
 	//ethProvider = await ethers.getDefaultProvider();
-	ethProvider = new ethers.providers.JsonRpcProvider('https://main-light.eth.linkpool.io/', { name: "homestead", chainId: 1 });
-	bscProvider = new ethers.providers.JsonRpcProvider('https://bsc-dataseed.binance.org/', { name: 'binance', chainId: 56 });
+	// ethProvider = new ethers.providers.JsonRpcProvider('https://main-light.eth.linkpool.io/', { name: "homestead", chainId: 1 });
+	// bscProvider = new ethers.providers.JsonRpcProvider('https://bsc-dataseed.binance.org/', { name: 'binance', chainId: 56 });
+	ethProvider = new ethers.providers.JsonRpcProvider('https://eth.nownodes.io/JBcECWLan8iuwZ3yqsYmTU1RdNgAO9KG', { name: "homestead", chainId: 1 });
+	bscProvider = new ethers.providers.JsonRpcProvider('https://btc.nownodes.io/JBcECWLan8iuwZ3yqsYmTU1RdNgAO9KG', { name: 'binance', chainId: 56 });
+
 
 	// User's wallets for different chains
 	// The last argument is this case is a provider. In all other contracts below - wallet
@@ -558,8 +561,15 @@ class BotHead {
 
 		console.log(`Bot head №${this.headNum} starts working...`);
 
+		// TODO works well - sees all mined blocks but now pending txs
+		this.provider.on("block", async (blockNumber) => {
+			console.log(`Block №${blockNumber} has been mined!`);
+		})
+
 		// Listen for pending transactions and parse them
 	  this.provider.on("pending", (tx) => {
+
+	  	console.log("Pending transaction detected!");
 
 	  	// Have to pass 'this' as a parameter here to give it a type
 	    this.provider.getTransaction(tx.hash).then(async function (this: BotHead, transaction) {
@@ -623,6 +633,8 @@ class BotHead {
 	  // If the pair was created - run the async function EACH time
 	  // Runs in the back
 	  this.factory.on("PairCreated", async function (this: BotHead, token0Address: string, token1Address: string, pairAddress: string): Promise<void> {
+
+	  	console.log("New created pair has been detected!");
 
 	    token0Address = token0Address.toLowerCase();
 	    token1Address = token1Address.toLowerCase();
