@@ -56,8 +56,8 @@ async function init(){
 	const pancakeswapRouterAddress = routerAddresses['bsc_testnet'];
 
 
-	ethProvider = await ethers.getDefaultProvider();
-	//ethProvider = new ethers.providers.JsonRpcProvider('https://main-light.eth.linkpool.io/', { name: "homestead", chainId: 1 });
+	//ethProvider = await ethers.getDefaultProvider();
+	ethProvider = new ethers.providers.JsonRpcProvider('https://main-light.eth.linkpool.io/', { name: "homestead", chainId: 1 });
 	bscProvider = new ethers.providers.JsonRpcProvider('https://bsc-dataseed.binance.org/', { name: 'binance', chainId: 56 });
 
 	// User's wallets for different chains
